@@ -164,7 +164,7 @@ export function Globe({
   return (
     <div className="relative h-[46vh] min-h-[260px] w-full overflow-hidden bg-[#05070d] sm:h-[52vh] lg:h-auto lg:min-h-[520px] lg:flex-1">
       <Canvas
-        camera={{ position: [0, 0.35, 3.7], fov: 36 }}
+        camera={{ position: [0, 0.55, 5.4], fov: 38 }}
         dpr={[1, 1.5]}
         gl={{ antialias: true, alpha: false, toneMapping: THREE.NoToneMapping }}
       >
@@ -194,8 +194,8 @@ export function Globe({
         <OrbitControls
           enablePan={false}
           enableZoom={false}
-          minDistance={3.4}
-          maxDistance={4.2}
+          minDistance={4.8}
+          maxDistance={6.2}
           enableDamping
           dampingFactor={0.08}
         />
