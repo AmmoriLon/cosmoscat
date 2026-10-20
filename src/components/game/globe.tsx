@@ -12,19 +12,16 @@ import type { Contract, SimRef } from "@/lib/game/types";
 function Earth({ simRef }: { simRef: SimRef }) {
   const group = useRef<THREE.Group>(null);
   const textures = useMemo(() => {
-    const { day, night } = makeEarthCanvases();
+    const { day } = makeEarthCanvases();
     const map = new THREE.CanvasTexture(day);
-    const emissive = new THREE.CanvasTexture(night);
-    map.colorSpace = THREE.SRGBColorSpace;
-    emissive.colorSpace = THREE.SRGBColorSpace;
     map.needsUpdate = true;
-    emissive.needsUpdate = true;
-    return { map, emissive };
+    map.minFilter = THREE.LinearFilter;
+    map.magFilter = THREE.LinearFilter;
+    return { map };
   }, []);
 
   useEffect(() => () => {
     textures.map.dispose();
-    textures.emissive.dispose();
   }, [textures]);
 
   useFrame(() => {
@@ -35,18 +32,17 @@ function Earth({ simRef }: { simRef: SimRef }) {
     <group ref={group}>
       <mesh>
         <sphereGeometry args={[EARTH_R, 64, 48]} />
-        <meshStandardMaterial
+        <meshPhongMaterial
+          color="#ffffff"
           map={textures.map}
-          emissiveMap={textures.emissive}
-          emissive="#ffd2a0"
-          emissiveIntensity={0.35}
-          roughness={0.86}
-          metalness={0.02}
+          shininess={12}
+          specular="#335577"
+          toneMapped={false}
         />
       </mesh>
       <mesh>
-        <sphereGeometry args={[EARTH_R * 1.045, 48, 32]} />
-        <meshBasicMaterial color="#8fd0d4" transparent opacity={0.16} side={THREE.BackSide} />
+        <sphereGeometry args={[EARTH_R * 1.03, 32, 24]} />
+        <meshBasicMaterial color="#9ad4e0" transparent opacity={0.12} side={THREE.BackSide} toneMapped={false} />
       </mesh>
     </group>
   );
@@ -168,15 +164,14 @@ export function Globe({
   return (
     <div className="relative h-[46vh] min-h-[260px] w-full overflow-hidden bg-[#05070d] sm:h-[52vh] lg:h-auto lg:min-h-[520px] lg:flex-1">
       <Canvas
-        camera={{ position: [0, 0.85, 4.9], fov: 40 }}
-        dpr={[1, 1.6]}
-        gl={{ antialias: true, alpha: false }}
+        camera={{ position: [0, 0.35, 3.7], fov: 36 }}
+        dpr={[1, 1.5]}
+        gl={{ antialias: true, alpha: false, toneMapping: THREE.NoToneMapping }}
       >
-        <color attach="background" args={["#05070d"]} />
-        <ambientLight intensity={0.82} />
-        <hemisphereLight args={["#b8d4ff", "#1a140c", 0.55]} />
-        <directionalLight position={[5, 2.4, 4]} intensity={1.85} color="#fff4dd" />
-        <Stars radius={40} depth={20} count={900} factor={2.2} fade speed={0.4} />
+        <color attach="background" args={["#070b14"]} />
+        <ambientLight intensity={1.1} />
+        <directionalLight position={[4, 2, 3]} intensity={1.4} color="#fff6e0" />
+        <Stars radius={60} depth={30} count={400} factor={1.6} fade speed={0.2} />
         <Earth simRef={simRef} />
         <OrbitRing />
         <Satellite simRef={simRef} flash={flash} />
@@ -198,8 +193,9 @@ export function Globe({
           ))}
         <OrbitControls
           enablePan={false}
-          minDistance={3.2}
-          maxDistance={7.2}
+          enableZoom={false}
+          minDistance={3.4}
+          maxDistance={4.2}
           enableDamping
           dampingFactor={0.08}
         />
