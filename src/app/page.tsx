@@ -1,5 +1,5 @@
-import { GameLoader } from "@/components/game/game-loader";
+import { Game } from "@/components/game/game";
 
 export default function Home() {
-  return <GameLoader />;
+  return <Game />;
 }

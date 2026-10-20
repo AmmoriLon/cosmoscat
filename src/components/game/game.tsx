@@ -1,29 +1,20 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { GAME_TITLE } from "@/lib/game/data";
 import { formatMoney } from "@/lib/game/save";
 import { useGame } from "@/lib/game/use-game";
 import { BureauSheet } from "./bureau-sheet";
+import { Globe } from "./globe";
 import { Hangar } from "./hangar";
 import { Intro } from "./intro";
 import { Launch } from "./launch";
 import { OpsPanel } from "./ops";
 import { PhotoDialog } from "./photo-dialog";
 
-const Globe = dynamic(() => import("./globe").then((m) => m.Globe), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-[46vh] min-h-[260px] items-center justify-center bg-[#05070d] text-sm text-zinc-500 lg:h-auto lg:min-h-[520px] lg:flex-1">
-      Поднимаем Землю…
-    </div>
-  ),
-});
-
 export function Game() {
-  const { ready, state, sim, simRef, actions } = useGame();
+  const { state, sim, simRef, actions } = useGame();
   const [bureau, setBureau] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
   const [flash, setFlash] = useState(0);
@@ -32,14 +23,6 @@ export function Game() {
     () => state.contracts.find((c) => c.id === state.job?.contractId) ?? null,
     [state.contracts, state.job],
   );
-
-  if (!ready) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-[#070b12] text-sm text-zinc-400">
-        Поднимаем архив КБ…
-      </div>
-    );
-  }
 
   return (
     <div className="game-root">

@@ -30,6 +30,7 @@ import {
 import type { GameState, SimSnapshot, SystemId } from "./types";
 
 type Action =
+  | { type: "HYDRATE"; state: GameState }
   | { type: "INTRO_NEXT" }
   | { type: "SKIP_INTRO" }
   | { type: "FOCUS"; id: SystemId }
@@ -48,6 +49,8 @@ type Action =
 
 function reducer(state: GameState, action: Action): GameState {
   switch (action.type) {
+    case "HYDRATE":
+      return action.state;
     case "INTRO_NEXT": {
       if (state.introStep >= 3) return { ...state, phase: "hangar" };
       return { ...state, introStep: state.introStep + 1 };
@@ -215,17 +218,23 @@ const EMPTY_SIM: SimSnapshot = {
 };
 
 export function useGame() {
-  const [state, dispatch] = useReducer(reducer, undefined, loadState);
+  const [state, dispatch] = useReducer(reducer, undefined, freshState);
   const simRef = useRef<SimSnapshot>({ ...EMPTY_SIM });
   const [sim, setSim] = useState<SimSnapshot>(EMPTY_SIM);
   const prevAnomaly = useRef(0);
   const stateRef = useRef(state);
+  const boots = useRef(0);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
   useEffect(() => {
+    boots.current += 1;
+    if (boots.current === 1) {
+      dispatch({ type: "HYDRATE", state: loadState() });
+      return;
+    }
     persistState(state);
   }, [state]);
 
