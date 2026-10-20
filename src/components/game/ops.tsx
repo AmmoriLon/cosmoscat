@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { PPIS } from "@/lib/game/data";
-import { fmtCoord } from "@/lib/game/orbit";
+import { etaToTarget, fmtCoord } from "@/lib/game/orbit";
 import { formatMoney } from "@/lib/game/save";
 import type { Contract, GameState, PhotoJob, SimSnapshot } from "@/lib/game/types";
 import { CatPortrait } from "./cat-portrait";
@@ -64,7 +64,16 @@ export function OpsPanel({
 
       <div className="grid gap-2">
         {state.contracts.map((c) => (
-          <ContractCard key={c.id} contract={c} onAccept={() => onAccept(c.id)} />
+          <ContractCard
+            key={c.id}
+            contract={c}
+            eta={
+              c.status === "active"
+                ? etaToTarget(sim.anomaly, sim.earthAngle, c.lat, c.lon)
+                : null
+            }
+            onAccept={() => onAccept(c.id)}
+          />
         ))}
       </div>
 
@@ -115,7 +124,15 @@ function JobStrip({
   );
 }
 
-function ContractCard({ contract, onAccept }: { contract: Contract; onAccept: () => void }) {
+function ContractCard({
+  contract,
+  eta,
+  onAccept,
+}: {
+  contract: Contract;
+  eta: number | null;
+  onAccept: () => void;
+}) {
   return (
     <div className="flex gap-3 rounded-2xl border border-white/10 bg-[#121826]/70 p-3">
       <CatPortrait fur={contract.fur} size={48} />
@@ -137,7 +154,13 @@ function ContractCard({ contract, onAccept }: { contract: Contract; onAccept: ()
           </Button>
         ) : (
           <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-teal">
-            {contract.status === "active" ? "в плане съёмки" : "в контуре"}
+            {contract.status === "active"
+              ? eta != null && eta < 1
+                ? "в кадре — снимай"
+                : eta != null
+                  ? `в плане · проход через ${Math.max(1, Math.round(eta))} с`
+                  : "в плане съёмки"
+              : "в контуре"}
           </p>
         )}
       </div>

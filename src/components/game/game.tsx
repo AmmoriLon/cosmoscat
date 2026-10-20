@@ -16,7 +16,7 @@ import { PhotoDialog } from "./photo-dialog";
 const Globe = dynamic(() => import("./globe").then((m) => m.Globe), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[42vh] min-h-[240px] items-center justify-center bg-[#05070d] text-sm text-zinc-500">
+    <div className="flex h-[46vh] min-h-[260px] items-center justify-center bg-[#05070d] text-sm text-zinc-500 lg:h-auto lg:min-h-[520px] lg:flex-1">
       Поднимаем Землю…
     </div>
   ),
@@ -78,26 +78,28 @@ export function Game() {
       {state.phase === "launch" ? <Launch t={state.launchT} /> : null}
 
       {state.phase === "ops" ? (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           <Globe
             simRef={simRef}
             contracts={state.contracts}
             flash={flash}
             jobActive={!!state.job}
           />
-          <OpsPanel
-            state={state}
-            sim={sim}
-            onAccept={actions.accept}
-            onShoot={(id) => {
-              actions.shoot(id);
-              setFlash(performance.now());
-              setPhotoOpen(true);
-            }}
-            onOpenPhoto={() => setPhotoOpen(true)}
-            onOpenBureau={() => setBureau(true)}
-          />
-        </>
+          <div className="min-h-0 lg:w-[440px] lg:overflow-y-auto lg:border-l lg:border-white/10">
+            <OpsPanel
+              state={state}
+              sim={sim}
+              onAccept={actions.accept}
+              onShoot={(id) => {
+                actions.shoot(id);
+                setFlash(performance.now());
+                setPhotoOpen(true);
+              }}
+              onOpenPhoto={() => setPhotoOpen(true)}
+              onOpenBureau={() => setBureau(true)}
+            />
+          </div>
+        </div>
       ) : null}
 
       <PhotoDialog

@@ -1,8 +1,10 @@
 import {
   APPROACH_DEG,
+  EARTH_DAY_S,
   EARTH_R,
   IMAGE_WINDOW_DEG,
   INC_RAD,
+  ORBIT_PERIOD_S,
   PPI_WINDOW_DEG,
   RAAN_RAD,
   SAT_R,
@@ -117,6 +119,24 @@ export function ppiInView(satLat: number, satLon: number, stations: PPI[] = []) 
   return stations
     .filter((p) => inWindow(satLat, satLon, p.lat, p.lon, PPI_WINDOW_DEG))
     .map((p) => p.id);
+}
+
+export function etaToTarget(
+  anomaly: number,
+  earthAngle: number,
+  lat: number,
+  lon: number,
+) {
+  const steps = 90;
+  for (let i = 0; i <= steps; i++) {
+    const t = (i / steps) * ORBIT_PERIOD_S;
+    const a = anomaly + (t * Math.PI * 2) / ORBIT_PERIOD_S;
+    const ea = earthAngle + (t * Math.PI * 2) / EARTH_DAY_S;
+    const p = satEci(a);
+    const ll = eciToLatLon(p.x, p.y, p.z, ea);
+    if (inWindow(ll.lat, ll.lon, lat, lon, IMAGE_WINDOW_DEG)) return t;
+  }
+  return null;
 }
 
 export function fmtCoord(lat: number, lon: number) {

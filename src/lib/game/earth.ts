@@ -51,24 +51,24 @@ export function makeEarthCanvases(w = 1024, h = 512) {
       const i = (y * w + x) * 4;
       let r: number, g: number, b: number;
       if (ice) {
-        r = 214;
-        g = 226;
-        b = 232;
+        r = 236;
+        g = 244;
+        b = 248;
       } else if (land > 0.08) {
         const t = Math.min(1, land);
-        r = 86 + t * 70;
-        g = 108 + t * 42;
-        b = 72 + t * 18;
-        if (lat < 20 && lat > -24 && land < 0.45) {
-          r = 168;
-          g = 142;
-          b = 86;
+        r = 118 + t * 62;
+        g = 148 + t * 38;
+        b = 86 + t * 16;
+        if (lat < 22 && lat > -26 && land < 0.45) {
+          r = 210;
+          g = 176;
+          b = 104;
         }
       } else {
-        const deep = 0.55 + hash(x * 0.02, y * 0.02) * 0.2;
-        r = 18 * deep;
-        g = 48 * deep + 18;
-        b = 72 * deep + 36;
+        const deep = 0.72 + hash(x * 0.02, y * 0.02) * 0.2;
+        r = 22 + 28 * deep;
+        g = 92 + 48 * deep;
+        b = 138 + 42 * deep;
       }
       dimg.data[i] = r;
       dimg.data[i + 1] = g;

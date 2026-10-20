@@ -7,7 +7,7 @@ export function CatPortrait({
   size?: number;
   hat?: boolean;
 }) {
-  const ear = shade(fur, -18);
+  const ear = shade(fur, 12);
   const nose = "#e08a7a";
   return (
     <svg
@@ -17,18 +17,20 @@ export function CatPortrait({
       className="shrink-0 rounded-2xl ring-1 ring-white/10"
       aria-hidden
     >
-      <rect width="64" height="64" rx="16" fill="#121826" />
-      <path d="M10 28 L18 8 L28 24 Z" fill={ear} />
-      <path d="M54 28 L46 8 L36 24 Z" fill={ear} />
-      <circle cx="32" cy="36" r="18" fill={fur} />
-      <circle cx="25" cy="34" r="3.2" fill="#1a140f" />
-      <circle cx="39" cy="34" r="3.2" fill="#1a140f" />
-      <circle cx="24.2" cy="33.1" r="1" fill="#fff6e8" />
-      <circle cx="38.2" cy="33.1" r="1" fill="#fff6e8" />
-      <ellipse cx="32" cy="40" rx="2.2" ry="1.5" fill={nose} />
-      <path d="M32 41.5 Q28 45 24 43" stroke="#3a2a22" fill="none" strokeWidth="1.2" />
-      <path d="M32 41.5 Q36 45 40 43" stroke="#3a2a22" fill="none" strokeWidth="1.2" />
-      {hat ? <path d="M18 22 h28 l-4 -8 h-20 z" fill="#e8a25a" /> : null}
+      <rect width="64" height="64" rx="16" fill="#1c2436" />
+      <path d="M8 32 L16 4 L30 26 Z" fill={ear} />
+      <path d="M56 32 L48 4 L34 26 Z" fill={ear} />
+      <path d="M14 18 L16 8 L22 20 Z" fill="#f6d7c8" />
+      <path d="M50 18 L48 8 L42 20 Z" fill="#f6d7c8" />
+      <circle cx="32" cy="38" r="18" fill={fur} />
+      <circle cx="25" cy="36" r="3.4" fill="#1a140f" />
+      <circle cx="39" cy="36" r="3.4" fill="#1a140f" />
+      <circle cx="24.1" cy="35" r="1.1" fill="#fff6e8" />
+      <circle cx="38.1" cy="35" r="1.1" fill="#fff6e8" />
+      <ellipse cx="32" cy="42" rx="2.3" ry="1.6" fill={nose} />
+      <path d="M32 43.6 Q27 47 23 45" stroke="#3a2a22" fill="none" strokeWidth="1.3" />
+      <path d="M32 43.6 Q37 47 41 45" stroke="#3a2a22" fill="none" strokeWidth="1.3" />
+      {hat ? <path d="M16 20 h32 l-5 -9 h-22 z" fill="#e8a25a" /> : null}
     </svg>
   );
 }

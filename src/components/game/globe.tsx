@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Line, OrbitControls, Stars } from "@react-three/drei";
+import { OrbitControls, Stars } from "@react-three/drei";
 import * as THREE from "three";
 import { EARTH_R, PPIS, SAT_R } from "@/lib/game/data";
 import { makeEarthCanvases } from "@/lib/game/earth";
@@ -17,6 +17,8 @@ function Earth({ simRef }: { simRef: SimRef }) {
     const emissive = new THREE.CanvasTexture(night);
     map.colorSpace = THREE.SRGBColorSpace;
     emissive.colorSpace = THREE.SRGBColorSpace;
+    map.needsUpdate = true;
+    emissive.needsUpdate = true;
     return { map, emissive };
   }, []);
 
@@ -37,25 +39,31 @@ function Earth({ simRef }: { simRef: SimRef }) {
           map={textures.map}
           emissiveMap={textures.emissive}
           emissive="#ffd2a0"
-          emissiveIntensity={0.55}
-          roughness={0.92}
-          metalness={0.05}
+          emissiveIntensity={0.35}
+          roughness={0.86}
+          metalness={0.02}
         />
       </mesh>
       <mesh>
-        <sphereGeometry args={[EARTH_R * 1.035, 48, 32]} />
-        <meshBasicMaterial color="#7ec8c5" transparent opacity={0.07} side={THREE.BackSide} />
+        <sphereGeometry args={[EARTH_R * 1.045, 48, 32]} />
+        <meshBasicMaterial color="#8fd0d4" transparent opacity={0.16} side={THREE.BackSide} />
       </mesh>
     </group>
   );
 }
 
 function OrbitRing() {
-  const pts = useMemo(
-    () => orbitPoints().map((p) => new THREE.Vector3(p.x, p.y, p.z)),
-    [],
+  const tube = useMemo(() => {
+    const pts = orbitPoints().map((p) => new THREE.Vector3(p.x, p.y, p.z));
+    const curve = new THREE.CatmullRomCurve3(pts, true);
+    return new THREE.TubeGeometry(curve, 160, 0.014, 8, true);
+  }, []);
+  useEffect(() => () => tube.dispose(), [tube]);
+  return (
+    <mesh geometry={tube}>
+      <meshBasicMaterial color="#e8a25a" />
+    </mesh>
   );
-  return <Line points={pts} color="#e8a25a" transparent opacity={0.75} lineWidth={1} />;
 }
 
 function Satellite({ simRef, flash }: { simRef: SimRef; flash: number }) {
@@ -74,7 +82,7 @@ function Satellite({ simRef, flash }: { simRef: SimRef; flash: number }) {
   return (
     <group ref={ref}>
       <mesh>
-        <boxGeometry args={[0.045, 0.045, 0.1]} />
+        <boxGeometry args={[0.07, 0.07, 0.16]} />
         <meshStandardMaterial
           ref={mat}
           color="#d7dde6"
@@ -84,13 +92,13 @@ function Satellite({ simRef, flash }: { simRef: SimRef; flash: number }) {
           emissiveIntensity={0}
         />
       </mesh>
-      <mesh position={[0.09, 0, 0]}>
-        <boxGeometry args={[0.12, 0.002, 0.05]} />
-        <meshStandardMaterial color="#1b3a6b" emissive="#245" emissiveIntensity={0.4} />
+      <mesh position={[0.14, 0, 0]}>
+        <boxGeometry args={[0.18, 0.004, 0.08]} />
+        <meshStandardMaterial color="#1b3a6b" emissive="#3a7ad9" emissiveIntensity={0.6} />
       </mesh>
-      <mesh position={[-0.09, 0, 0]}>
-        <boxGeometry args={[0.12, 0.002, 0.05]} />
-        <meshStandardMaterial color="#1b3a6b" emissive="#245" emissiveIntensity={0.4} />
+      <mesh position={[-0.14, 0, 0]}>
+        <boxGeometry args={[0.18, 0.004, 0.08]} />
+        <meshStandardMaterial color="#1b3a6b" emissive="#3a7ad9" emissiveIntensity={0.6} />
       </mesh>
     </group>
   );
@@ -121,7 +129,7 @@ function Marker({
   return (
     <group ref={ref}>
       <mesh>
-        <sphereGeometry args={[0.035, 12, 12]} />
+        <sphereGeometry args={[0.055, 12, 12]} />
         <meshBasicMaterial color={color} />
       </mesh>
     </group>
@@ -158,16 +166,17 @@ export function Globe({
   jobActive: boolean;
 }) {
   return (
-    <div className="relative h-[42vh] min-h-[240px] w-full overflow-hidden rounded-b-3xl bg-[#05070d] sm:h-[52vh]">
+    <div className="relative h-[46vh] min-h-[260px] w-full overflow-hidden bg-[#05070d] sm:h-[52vh] lg:h-auto lg:min-h-[520px] lg:flex-1">
       <Canvas
-        camera={{ position: [0, 1.15, 5.6], fov: 42 }}
+        camera={{ position: [0, 0.85, 4.9], fov: 40 }}
         dpr={[1, 1.6]}
         gl={{ antialias: true, alpha: false }}
       >
         <color attach="background" args={["#05070d"]} />
-        <ambientLight intensity={0.35} />
-        <directionalLight position={[6, 2, 3]} intensity={1.35} color="#fff4dd" />
-        <Stars radius={40} depth={20} count={800} factor={2} fade speed={0.4} />
+        <ambientLight intensity={0.82} />
+        <hemisphereLight args={["#b8d4ff", "#1a140c", 0.55]} />
+        <directionalLight position={[5, 2.4, 4]} intensity={1.85} color="#fff4dd" />
+        <Stars radius={40} depth={20} count={900} factor={2.2} fade speed={0.4} />
         <Earth simRef={simRef} />
         <OrbitRing />
         <Satellite simRef={simRef} flash={flash} />
@@ -189,12 +198,17 @@ export function Globe({
           ))}
         <OrbitControls
           enablePan={false}
-          minDistance={3.6}
-          maxDistance={8}
+          minDistance={3.2}
+          maxDistance={7.2}
           enableDamping
           dampingFactor={0.08}
         />
       </Canvas>
+      <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap gap-2 font-mono text-[10px] text-zinc-300">
+        <span className="rounded-full bg-black/45 px-2 py-1">орбита</span>
+        <span className="rounded-full bg-black/45 px-2 py-1 text-teal">ППИ</span>
+        <span className="rounded-full bg-black/45 px-2 py-1 text-copper">цель</span>
+      </div>
     </div>
   );
 }
