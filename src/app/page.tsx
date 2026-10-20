@@ -1,14 +1,5 @@
-import dynamic from "next/dynamic";
-
-const Game = dynamic(() => import("@/components/game/game").then((m) => m.Game), {
-  ssr: false,
-  loading: () => (
-    <div className="flex min-h-dvh items-center justify-center bg-[#070b12] text-sm text-zinc-400">
-      Поднимаем архив КБ…
-    </div>
-  ),
-});
+import { GameLoader } from "@/components/game/game-loader";
 
 export default function Home() {
-  return <Game />;
+  return <GameLoader />;
 }
