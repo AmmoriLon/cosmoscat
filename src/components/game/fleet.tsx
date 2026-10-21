@@ -152,7 +152,7 @@ function Workshop({
   const can = state.money >= cost && draft.name.trim().length >= 2;
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-3 pb-24 pt-3">
+    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-3 pb-40 pt-3">
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="font-heading text-lg">Новый аппарат</p>
@@ -259,7 +259,8 @@ function Workshop({
         </div>
       </section>
 
-      <div className="sticky bottom-20 rounded-2xl border border-white/10 bg-[#0e1420] p-3">
+      <div className="h-2" />
+      <div className="sticky bottom-20 rounded-2xl border border-white/10 bg-[#0e1420]/95 p-3 backdrop-blur-md">
         <div className="mb-2 flex items-center justify-between text-sm">
           <span className="text-zinc-400">Сборка</span>
           <span className="font-mono text-copper">{formatMoney(cost)}</span>
