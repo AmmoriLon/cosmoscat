@@ -175,11 +175,9 @@
 }
 
 .rocket-flame {
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  bottom: -18px;
+  position: relative;
   height: 36px;
+  width: 22px;
   background: radial-gradient(circle at 50% 0, #fff6d2, #e8a25a 40%, transparent 70%);
   filter: blur(0.5px);
   animation: flame 0.12s infinite alternate;

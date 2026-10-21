@@ -10,7 +10,16 @@ export type Biome =
   | "city"
   | "coast"
   | "mine"
-  | "desert";
+  | "desert"
+  | "volcano"
+  | "forest"
+  | "aurora";
+
+export type CameraId = "opt" | "ir" | "ms";
+export type OrbitId = "sso535" | "eq400" | "polar800" | "ellip";
+export type MemoryId = "bzu1" | "bzu4" | "bzu16";
+export type CraftStatus = "alive" | "reentry";
+export type OpsTab = "contracts" | "fleet";
 
 export type JobStage = "onboard" | "downlink" | "processing" | "ready";
 
@@ -35,6 +44,7 @@ export interface ContractTemplate {
   biome: Biome;
   payout: number;
   fur: string;
+  camera: CameraId;
 }
 
 export interface Contract extends ContractTemplate {
@@ -44,11 +54,30 @@ export interface Contract extends ContractTemplate {
 }
 
 export interface PhotoJob {
+  id: string;
+  craftId: string;
   contractId: string;
   stage: JobStage;
   progress: number;
   ppiId?: string;
   capturedAt: number;
+}
+
+export interface Craft {
+  id: string;
+  name: string;
+  orbit: OrbitId;
+  cameras: CameraId[];
+  memory: MemoryId;
+  launchedAt: number;
+  status: CraftStatus;
+}
+
+export interface WorkshopDraft {
+  name: string;
+  orbit: OrbitId;
+  cameras: CameraId[];
+  memory: MemoryId;
 }
 
 export interface LogEntry {
@@ -58,7 +87,7 @@ export interface LogEntry {
 }
 
 export interface GameState {
-  version: 1;
+  version: 2;
   phase: Phase;
   introStep: number;
   money: number;
@@ -69,8 +98,14 @@ export interface GameState {
   photosSold: number;
   moneyEarned: number;
   orbits: number;
+  timeSec: number;
+  tab: OpsTab;
   contracts: Contract[];
-  job: PhotoJob | null;
+  jobs: PhotoJob[];
+  crafts: Craft[];
+  activeCraftId: string | null;
+  workshop: WorkshopDraft | null;
+  pendingCraft: Craft | null;
   log: LogEntry[];
   launchT: number;
   seenRadarBrief: boolean;

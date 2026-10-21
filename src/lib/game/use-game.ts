@@ -4,30 +4,41 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import {
   EARTH_DAY_S,
   ENGINEER_REPAIR_PER_S,
-  ORBIT_PERIOD_S,
+  LAUNCH_END_S,
+  ORBITS,
   PPIS,
   TAP_REPAIR,
   UPGRADES,
+  buildCost,
+  emptyWorkshop,
 } from "./data";
 import {
   approachIds,
   eciToLatLon,
   imagingIds,
+  orbitCanSee,
   ppiInView,
   satEci,
 } from "./orbit";
 import {
+  activeCraft,
   addLog,
   clearSave,
+  craftJobs,
+  craftLeft,
+  craftSlots,
   freshState,
   loadState,
+  makeLapka,
+  nextCraftName,
   persistState,
   photoPayout,
   pickContracts,
   processTime,
   systemReady,
+  uid,
 } from "./save";
-import type { GameState, SimSnapshot, SystemId } from "./types";
+import type { Craft, GameState, MemoryId, OpsTab, OrbitId, SimSnapshot, SystemId, WorkshopDraft } from "./types";
 
 type Action =
   | { type: "HYDRATE"; state: GameState }
@@ -41,11 +52,42 @@ type Action =
   | { type: "ACCEPT"; id: string }
   | { type: "SHOOT"; id: string }
   | { type: "JOB_TICK"; dt: number; ppiIds: string[] }
-  | { type: "SELL" }
+  | { type: "SELL"; jobId: string }
   | { type: "BUY_OPTICS" }
   | { type: "BUY_OPS" }
   | { type: "ORBIT" }
+  | { type: "TIME"; dt: number }
+  | { type: "SET_TAB"; tab: OpsTab }
+  | { type: "SELECT_CRAFT"; id: string }
+  | { type: "OPEN_WORKSHOP" }
+  | { type: "CLOSE_WORKSHOP" }
+  | { type: "EDIT_WORKSHOP"; draft: Partial<WorkshopDraft> }
+  | { type: "COMMIT_BUILD" }
   | { type: "RESET" };
+
+function applyReentries(state: GameState): GameState {
+  let next = state;
+  const crafts = state.crafts.map((c) => {
+    if (c.status === "alive" && craftLeft(c, state.timeSec) <= 0) {
+      next = addLog(next, `«${c.name}» вошёл в атмосферу и сгорел. Срок вышел.`);
+      return { ...c, status: "reentry" as const };
+    }
+    return c;
+  });
+  if (crafts.every((c, i) => c === state.crafts[i])) return state;
+  const alive = crafts.filter((c) => c.status === "alive");
+  const activeStill = crafts.find((c) => c.id === state.activeCraftId && c.status === "alive");
+  return {
+    ...next,
+    crafts,
+    activeCraftId: activeStill?.id ?? alive[0]?.id ?? null,
+    jobs: next.jobs.filter((j) => {
+      const host = crafts.find((c) => c.id === j.craftId);
+      if (host?.status === "reentry" && j.stage !== "ready") return false;
+      return true;
+    }),
+  };
+}
 
 function reducer(state: GameState, action: Action): GameState {
   switch (action.type) {
@@ -83,88 +125,119 @@ function reducer(state: GameState, action: Action): GameState {
     case "START_LAUNCH":
       if (!systemReady(state.repairs) || state.phase !== "hangar") return state;
       return addLog(
-        { ...state, phase: "launch", launchT: 0 },
+        { ...state, phase: "launch", launchT: 0, pendingCraft: makeLapka(state.timeSec) },
         "Вывоз на старт. Расчёт выведения на ССО 535 км открыт.",
       );
     case "LAUNCH_TICK": {
       if (state.phase !== "launch") return state;
       const t = state.launchT + action.dt;
-      if (t >= 11.4) {
+      if (t >= LAUNCH_END_S) {
+        const craft = state.pendingCraft ?? makeLapka(state.timeSec);
+        const already = state.crafts.some((c) => c.id === craft.id);
+        const crafts = already ? state.crafts : [...state.crafts, { ...craft, launchedAt: state.timeSec, status: "alive" as const }];
         return addLog(
           {
             ...state,
             phase: "ops",
             launchT: t,
-            orbits: 1,
-            contracts: pickContracts([], 3),
+            orbits: Math.max(1, state.orbits),
+            contracts: state.contracts.length ? state.contracts : pickContracts([], 3),
+            crafts,
+            activeCraftId: craft.id,
+            pendingCraft: null,
+            tab: "contracts",
           },
-          "«Лапка-1» на рабочем витке. Ждём заявки. Память бортовая — один кадр.",
+          `«${craft.name}» на рабочем витке. БЗУ ${craftSlots(craft)} кадр., ${ORBITS[craft.orbit].name}.`,
         );
       }
       return { ...state, launchT: t };
     }
     case "ACCEPT": {
-      const contracts = state.contracts.map((c) =>
-        c.id === action.id && c.status === "offered" ? { ...c, status: "active" as const } : c,
-      );
+      const craft = activeCraft(state);
       const c = state.contracts.find((x) => x.id === action.id);
-      return addLog({ ...state, contracts }, c ? `${c.client} передала координаты. Ставь в план съёмки.` : "Заявка принята.");
+      if (!c || c.status !== "offered") return state;
+      if (!craft || craft.status !== "alive") {
+        return addLog(state, "Нет живого КА. Собери новый в аппаратах.");
+      }
+      if (!craft.cameras.includes(c.camera)) {
+        return addLog(state, `«${craft.name}» не несёт нужный канал. Нужна другая камера.`);
+      }
+      if (!orbitCanSee(craft.orbit, c.lat)) {
+        return addLog(state, `Эта орбита не берёт ${c.title}. Широта вне полосы.`);
+      }
+      const contracts = state.contracts.map((x) =>
+        x.id === action.id ? { ...x, status: "active" as const } : x,
+      );
+      return addLog({ ...state, contracts }, `${c.client} передала координаты. Ставь в план съёмки.`);
     }
     case "SHOOT": {
-      if (state.job) return state;
+      const craft = activeCraft(state);
       const c = state.contracts.find((x) => x.id === action.id && x.status === "active");
-      if (!c) return state;
+      if (!c || !craft || craft.status !== "alive") return state;
+      if (!craft.cameras.includes(c.camera)) return state;
+      if (craftJobs(state, craft.id).length >= craftSlots(craft)) {
+        return addLog(state, `БЗУ «${craft.name}» полно. Сбрось или продай кадр.`);
+      }
+      const job = {
+        id: uid("job"),
+        craftId: craft.id,
+        contractId: c.id,
+        stage: "onboard" as const,
+        progress: 0,
+        capturedAt: Date.now(),
+      };
       return addLog(
         {
           ...state,
-          job: { contractId: c.id, stage: "onboard", progress: 0, capturedAt: Date.now() },
+          jobs: [...state.jobs, job],
           contracts: state.contracts.map((x) => (x.id === c.id ? { ...x, status: "pipeline" as const } : x)),
         },
-        `Затвор. Сырой кадр «${c.title}» на борту. Ждём зону ППИ.`,
+        `Затвор «${craft.name}». Сырой кадр «${c.title}» на борту.`,
       );
     }
     case "JOB_TICK": {
-      if (!state.job) return state;
-      const job = { ...state.job };
-      if (job.stage === "onboard") {
-        const hit = action.ppiIds[0];
-        if (hit) {
-          job.stage = "downlink";
-          job.progress = 0;
-          job.ppiId = hit;
-        }
-      } else if (job.stage === "downlink") {
-        if (!job.ppiId || action.ppiIds.includes(job.ppiId)) {
-          job.progress = Math.min(1, job.progress + action.dt / 2.6);
-          if (job.progress >= 1) {
-            job.stage = "processing";
-            job.progress = 0;
+      if (!state.jobs.length) return state;
+      const jobs = state.jobs.map((job) => {
+        const next = { ...job };
+        if (next.stage === "onboard") {
+          const hit = action.ppiIds[0];
+          if (hit) {
+            next.stage = "downlink";
+            next.progress = 0;
+            next.ppiId = hit;
+          }
+        } else if (next.stage === "downlink") {
+          if (!next.ppiId || action.ppiIds.includes(next.ppiId)) {
+            next.progress = Math.min(1, next.progress + action.dt / 2.6);
+            if (next.progress >= 1) {
+              next.stage = "processing";
+              next.progress = 0;
+            }
+          }
+        } else if (next.stage === "processing") {
+          next.progress = Math.min(1, next.progress + action.dt / processTime(state.operatorsLevel));
+          if (next.progress >= 1) {
+            next.stage = "ready";
+            next.progress = 1;
           }
         }
-      } else if (job.stage === "processing") {
-        job.progress = Math.min(1, job.progress + action.dt / processTime(state.operatorsLevel));
-        if (job.progress >= 1) {
-          job.stage = "ready";
-          job.progress = 1;
-        }
-      }
-      return { ...state, job };
+        return next;
+      });
+      return { ...state, jobs };
     }
     case "SELL": {
-      if (!state.job || state.job.stage !== "ready") return state;
-      const c = state.contracts.find((x) => x.id === state.job?.contractId);
-      if (!c) return { ...state, job: null };
+      const job = state.jobs.find((j) => j.id === action.jobId && j.stage === "ready");
+      if (!job) return state;
+      const c = state.contracts.find((x) => x.id === job.contractId);
+      if (!c) return { ...state, jobs: state.jobs.filter((j) => j.id !== job.id) };
       const pay = photoPayout(c, state.opticsLevel);
       const used = state.contracts.map((x) => x.id);
       const replacement = pickContracts(used, 1);
-      const contracts = [
-        ...state.contracts.filter((x) => x.id !== c.id),
-        ...replacement,
-      ];
+      const contracts = [...state.contracts.filter((x) => x.id !== c.id), ...replacement];
       let next = addLog(
         {
           ...state,
-          job: null,
+          jobs: state.jobs.filter((j) => j.id !== job.id),
           money: state.money + pay,
           moneyEarned: state.moneyEarned + pay,
           photosSold: state.photosSold + 1,
@@ -200,11 +273,64 @@ function reducer(state: GameState, action: Action): GameState {
     }
     case "ORBIT":
       return { ...state, orbits: state.orbits + 1 };
+    case "TIME": {
+      if (state.phase !== "ops") return state;
+      return applyReentries({ ...state, timeSec: state.timeSec + action.dt });
+    }
+    case "SET_TAB":
+      return { ...state, tab: action.tab };
+    case "SELECT_CRAFT":
+      return { ...state, activeCraftId: action.id, tab: "contracts" };
+    case "OPEN_WORKSHOP":
+      return { ...state, tab: "fleet", workshop: emptyWorkshop(nextCraftName(state.crafts)) };
+    case "CLOSE_WORKSHOP":
+      return { ...state, workshop: null };
+    case "EDIT_WORKSHOP": {
+      if (!state.workshop) return state;
+      const draft = { ...state.workshop, ...action.draft };
+      if (action.draft.cameras) {
+        draft.cameras = action.draft.cameras.length ? action.draft.cameras : ["opt"];
+      }
+      return { ...state, workshop: draft };
+    }
+    case "COMMIT_BUILD": {
+      if (!state.workshop) return state;
+      const draft = state.workshop;
+      const name = draft.name.trim().slice(0, 22);
+      if (name.length < 2) return addLog(state, "Дай аппарату имя — хотя бы два знака.");
+      if (!draft.cameras.length) return state;
+      const cost = buildCost(draft);
+      if (state.money < cost) return addLog(state, `Не хватает ${cost - state.money} ккр на сборку.`);
+      const craft: Craft = {
+        id: uid("craft"),
+        name,
+        orbit: draft.orbit,
+        cameras: draft.cameras,
+        memory: draft.memory,
+        launchedAt: state.timeSec,
+        status: "alive",
+      };
+      return addLog(
+        {
+          ...state,
+          money: state.money - cost,
+          workshop: null,
+          pendingCraft: craft,
+          phase: "launch",
+          launchT: 0,
+        },
+        `Сборка «${name}» закрыта. ${formatBuildLine(draft)} Вывоз на старт.`,
+      );
+    }
     case "RESET":
       return freshState();
     default:
       return state;
   }
+}
+
+function formatBuildLine(draft: WorkshopDraft) {
+  return `${ORBITS[draft.orbit].name}, ${draft.cameras.join("/")}, ${draft.memory}.`;
 }
 
 const EMPTY_SIM: SimSnapshot = {
@@ -247,16 +373,19 @@ export function useGame() {
       last = now;
       const s = stateRef.current;
       if (s.phase === "ops") {
+        const craft = activeCraft(s);
+        const orbitId = craft?.orbit ?? "sso535";
+        const period = ORBITS[orbitId].period;
         const snap = simRef.current;
-        snap.anomaly = (snap.anomaly + (dt * Math.PI * 2) / ORBIT_PERIOD_S) % (Math.PI * 2);
+        snap.anomaly = (snap.anomaly + (dt * Math.PI * 2) / period) % (Math.PI * 2);
         snap.earthAngle = (snap.earthAngle + (dt * Math.PI * 2) / EARTH_DAY_S) % (Math.PI * 2);
-        const p = satEci(snap.anomaly);
+        const p = satEci(snap.anomaly, orbitId);
         const ll = eciToLatLon(p.x, p.y, p.z, snap.earthAngle);
         snap.satLat = ll.lat;
         snap.satLon = ll.lon;
         const active = s.contracts.filter((c) => c.status === "active");
-        snap.inImaging = imagingIds(ll.lat, ll.lon, active);
-        snap.approaching = approachIds(ll.lat, ll.lon, active);
+        snap.inImaging = imagingIds(ll.lat, ll.lon, active, orbitId);
+        snap.approaching = approachIds(ll.lat, ll.lon, active, orbitId);
         snap.inPpi = ppiInView(ll.lat, ll.lon, PPIS);
       }
       acc += dt;
@@ -269,7 +398,8 @@ export function useGame() {
           const snap = simRef.current;
           if (snap.anomaly < prevAnomaly.current) dispatch({ type: "ORBIT" });
           prevAnomaly.current = snap.anomaly;
-          if (s.job) dispatch({ type: "JOB_TICK", dt: step, ppiIds: snap.inPpi });
+          dispatch({ type: "TIME", dt: step });
+          if (s.jobs.length) dispatch({ type: "JOB_TICK", dt: step, ppiIds: snap.inPpi });
           setSim({ ...snap });
         }
       }
@@ -305,9 +435,22 @@ export function useGame() {
       startLaunch: () => dispatch({ type: "START_LAUNCH" }),
       accept: (id: string) => dispatch({ type: "ACCEPT", id }),
       shoot,
-      sell: () => dispatch({ type: "SELL" }),
+      sell: (jobId: string) => dispatch({ type: "SELL", jobId }),
       buyOptics: () => dispatch({ type: "BUY_OPTICS" }),
       buyOps: () => dispatch({ type: "BUY_OPS" }),
+      setTab: (tab: OpsTab) => dispatch({ type: "SET_TAB", tab }),
+      selectCraft: (id: string) => dispatch({ type: "SELECT_CRAFT", id }),
+      openWorkshop: () => dispatch({ type: "OPEN_WORKSHOP" }),
+      closeWorkshop: () => dispatch({ type: "CLOSE_WORKSHOP" }),
+      editWorkshop: (draft: Partial<WorkshopDraft>) => dispatch({ type: "EDIT_WORKSHOP", draft }),
+      toggleCamera: (id: WorkshopDraft["cameras"][number]) => {
+        const cur = stateRef.current.workshop?.cameras ?? ["opt"];
+        const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+        dispatch({ type: "EDIT_WORKSHOP", draft: { cameras: next } });
+      },
+      setOrbit: (orbit: OrbitId) => dispatch({ type: "EDIT_WORKSHOP", draft: { orbit } }),
+      setMemory: (memory: MemoryId) => dispatch({ type: "EDIT_WORKSHOP", draft: { memory } }),
+      commitBuild: () => dispatch({ type: "COMMIT_BUILD" }),
       reset,
     }),
     [reset, shoot, tap],

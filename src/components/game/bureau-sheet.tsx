@@ -9,7 +9,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { ROADMAP, UPGRADES } from "@/lib/game/data";
-import { formatMoney } from "@/lib/game/save";
+import { formatBureauClock, formatMoney } from "@/lib/game/save";
 import type { GameState } from "@/lib/game/types";
 
 export function BureauSheet({
@@ -36,7 +36,7 @@ export function BureauSheet({
         <SheetHeader>
           <SheetTitle>Журнал КБ</SheetTitle>
           <SheetDescription>
-            Бюджет {formatMoney(state.money)} · продано кадров {state.photosSold} · витков {state.orbits}
+            {formatBureauClock(state.timeSec)} · бюджет {formatMoney(state.money)} · кадров {state.photosSold} · витков {state.orbits}
           </SheetDescription>
         </SheetHeader>
         <div className="space-y-5 px-4 pb-6">

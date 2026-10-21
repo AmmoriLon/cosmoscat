@@ -26,7 +26,7 @@ export function PhotoDialog({
   job: PhotoJob | null;
   contract: Contract | null;
   opticsLevel: number;
-  onSell: () => void;
+  onSell: (jobId: string) => void;
   onClose: () => void;
 }) {
   const raw = !job || job.stage !== "ready";
@@ -62,7 +62,7 @@ export function PhotoDialog({
         ) : null}
         <DialogFooter className="sm:justify-between">
           {job?.stage === "ready" && contract ? (
-            <Button className="h-11 w-full sm:w-auto" onClick={onSell}>
+            <Button className="h-11 w-full sm:w-auto" onClick={() => onSell(job.id)}>
               Продать за {formatMoney(photoPayout(contract, opticsLevel))}
             </Button>
           ) : (

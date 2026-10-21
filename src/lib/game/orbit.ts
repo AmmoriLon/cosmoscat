@@ -3,13 +3,10 @@ import {
   EARTH_DAY_S,
   EARTH_R,
   IMAGE_WINDOW_DEG,
-  INC_RAD,
-  ORBIT_PERIOD_S,
+  ORBITS,
   PPI_WINDOW_DEG,
-  RAAN_RAD,
-  SAT_R,
 } from "./data";
-import type { PPI } from "./types";
+import type { OrbitId, PPI } from "./types";
 
 export function wrapLon(lon: number) {
   let x = lon;
@@ -18,26 +15,37 @@ export function wrapLon(lon: number) {
   return x;
 }
 
-export function satEci(anomaly: number) {
+export function satRadius(anomaly: number, orbitId: OrbitId = "sso535") {
+  const spec = ORBITS[orbitId];
+  const a = EARTH_R + spec.alt;
+  const e = spec.ecc;
+  if (e <= 0) return a;
+  return (a * (1 - e * e)) / (1 + e * Math.cos(anomaly));
+}
+
+export function satEci(anomaly: number, orbitId: OrbitId = "sso535") {
+  const spec = ORBITS[orbitId];
+  const r = satRadius(anomaly, orbitId);
   const u = anomaly;
-  const i = INC_RAD;
-  const o = RAAN_RAD;
+  const i = (spec.inc * Math.PI) / 180;
+  const o = (spec.raan * Math.PI) / 180;
   const cu = Math.cos(u);
   const su = Math.sin(u);
   const ci = Math.cos(i);
   const si = Math.sin(i);
   const co = Math.cos(o);
   const so = Math.sin(o);
-  const x = SAT_R * (co * cu - so * su * ci);
-  const y = SAT_R * (su * si);
-  const z = SAT_R * (so * cu + co * su * ci);
-  return { x, y, z };
+  return {
+    x: r * (co * cu - so * su * ci),
+    y: r * (su * si),
+    z: r * (so * cu + co * su * ci),
+  };
 }
 
-export function orbitPoints(segments = 160) {
+export function orbitPoints(orbitId: OrbitId = "sso535", segments = 160) {
   const pts: { x: number; y: number; z: number }[] = [];
   for (let i = 0; i <= segments; i++) {
-    pts.push(satEci((i / segments) * Math.PI * 2));
+    pts.push(satEci((i / segments) * Math.PI * 2, orbitId));
   }
   return pts;
 }
@@ -67,12 +75,7 @@ export function eciToLatLon(x: number, y: number, z: number, earthAngle: number)
   return { lat, lon };
 }
 
-export function angularDistance(
-  aLat: number,
-  aLon: number,
-  bLat: number,
-  bLon: number,
-) {
+export function angularDistance(aLat: number, aLon: number, bLat: number, bLon: number) {
   const p1 = (aLat * Math.PI) / 180;
   const p2 = (bLat * Math.PI) / 180;
   const dL = ((bLon - aLon) * Math.PI) / 180;
@@ -82,13 +85,11 @@ export function angularDistance(
   return (2 * Math.asin(Math.min(1, Math.sqrt(s))) * 180) / Math.PI;
 }
 
-export function inWindow(
-  satLat: number,
-  satLon: number,
-  lat: number,
-  lon: number,
-  deg: number,
-) {
+export function orbitCanSee(orbitId: OrbitId, lat: number) {
+  return Math.abs(lat) <= ORBITS[orbitId].maxLat + 0.2;
+}
+
+export function inWindow(satLat: number, satLon: number, lat: number, lon: number, deg: number) {
   return angularDistance(satLat, satLon, lat, lon) <= deg;
 }
 
@@ -96,19 +97,24 @@ export function imagingIds(
   satLat: number,
   satLon: number,
   targets: { id: string; lat: number; lon: number }[],
+  orbitId: OrbitId = "sso535",
   deg = IMAGE_WINDOW_DEG,
 ) {
-  return targets.filter((t) => inWindow(satLat, satLon, t.lat, t.lon, deg)).map((t) => t.id);
+  return targets
+    .filter((t) => orbitCanSee(orbitId, t.lat) && inWindow(satLat, satLon, t.lat, t.lon, deg))
+    .map((t) => t.id);
 }
 
 export function approachIds(
   satLat: number,
   satLon: number,
   targets: { id: string; lat: number; lon: number }[],
+  orbitId: OrbitId = "sso535",
 ) {
   return targets
     .filter(
       (t) =>
+        orbitCanSee(orbitId, t.lat) &&
         inWindow(satLat, satLon, t.lat, t.lon, APPROACH_DEG) &&
         !inWindow(satLat, satLon, t.lat, t.lon, IMAGE_WINDOW_DEG),
     )
@@ -126,13 +132,16 @@ export function etaToTarget(
   earthAngle: number,
   lat: number,
   lon: number,
+  orbitId: OrbitId = "sso535",
 ) {
+  if (!orbitCanSee(orbitId, lat)) return null;
+  const period = ORBITS[orbitId].period;
   const steps = 90;
   for (let i = 0; i <= steps; i++) {
-    const t = (i / steps) * ORBIT_PERIOD_S;
-    const a = anomaly + (t * Math.PI * 2) / ORBIT_PERIOD_S;
+    const t = (i / steps) * period;
+    const a = anomaly + (t * Math.PI * 2) / period;
     const ea = earthAngle + (t * Math.PI * 2) / EARTH_DAY_S;
-    const p = satEci(a);
+    const p = satEci(a, orbitId);
     const ll = eciToLatLon(p.x, p.y, p.z, ea);
     if (inWindow(ll.lat, ll.lon, lat, lon, IMAGE_WINDOW_DEG)) return t;
   }

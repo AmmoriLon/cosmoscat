@@ -4,9 +4,9 @@ import { Suspense, useMemo, useRef } from "react";
 import { Canvas, useFrame, useLoader } from "@react-three/fiber";
 import { OrbitControls, Stars } from "@react-three/drei";
 import * as THREE from "three";
-import { EARTH_R, PPIS, SAT_R } from "@/lib/game/data";
-import { latLonToXyz, orbitPoints, rotateY, satEci } from "@/lib/game/orbit";
-import type { Contract, SimRef } from "@/lib/game/types";
+import { EARTH_R, PPIS } from "@/lib/game/data";
+import { latLonToXyz, orbitPoints, rotateY, satEci, satRadius } from "@/lib/game/orbit";
+import type { Contract, OrbitId, SimRef } from "@/lib/game/types";
 
 function Earth({ simRef }: { simRef: SimRef }) {
   const group = useRef<THREE.Group>(null);
@@ -28,11 +28,11 @@ function Earth({ simRef }: { simRef: SimRef }) {
   );
 }
 
-function OrbitRing() {
+function OrbitRing({ orbitId }: { orbitId: OrbitId }) {
   const curve = useMemo(() => {
-    const pts = orbitPoints().map((p) => new THREE.Vector3(p.x, p.y, p.z));
+    const pts = orbitPoints(orbitId).map((p) => new THREE.Vector3(p.x, p.y, p.z));
     return new THREE.CatmullRomCurve3(pts, true);
-  }, []);
+  }, [orbitId]);
   return (
     <mesh>
       <tubeGeometry args={[curve, 128, 0.012, 8, true]} />
@@ -41,12 +41,12 @@ function OrbitRing() {
   );
 }
 
-function Satellite({ simRef, flash }: { simRef: SimRef; flash: number }) {
+function Satellite({ simRef, flash, orbitId }: { simRef: SimRef; flash: number; orbitId: OrbitId }) {
   const ref = useRef<THREE.Group>(null);
   const mat = useRef<THREE.MeshStandardMaterial>(null);
   useFrame(() => {
     if (!ref.current) return;
-    const p = satEci(simRef.current.anomaly);
+    const p = satEci(simRef.current.anomaly, orbitId);
     ref.current.position.set(p.x, p.y, p.z);
     ref.current.lookAt(0, 0, 0);
     if (mat.current) mat.current.emissiveIntensity = flash > 0 && performance.now() - flash < 500 ? 2 : 0.2;
@@ -101,14 +101,14 @@ function Marker({
   );
 }
 
-function Beam({ simRef }: { simRef: SimRef }) {
+function Beam({ simRef, orbitId }: { simRef: SimRef; orbitId: OrbitId }) {
   const ref = useRef<THREE.Mesh>(null);
   useFrame(() => {
     if (!ref.current) return;
-    const p = satEci(simRef.current.anomaly);
+    const p = satEci(simRef.current.anomaly, orbitId);
     ref.current.position.set(p.x / 2, p.y / 2, p.z / 2);
     ref.current.lookAt(p.x, p.y, p.z);
-    ref.current.scale.set(1, 1, (SAT_R - EARTH_R) / 2);
+    ref.current.scale.set(1, 1, (satRadius(simRef.current.anomaly, orbitId) - EARTH_R) / 2);
   });
   return (
     <mesh ref={ref}>
@@ -123,11 +123,13 @@ export function Globe({
   contracts,
   flash,
   jobActive,
+  orbitId = "sso535",
 }: {
   simRef: SimRef;
   contracts: Contract[];
   flash: number;
   jobActive: boolean;
+  orbitId?: OrbitId;
 }) {
   return (
     <div className="relative h-[46vh] min-h-[280px] w-full overflow-hidden bg-[#070b14] sm:h-[52vh] lg:h-auto lg:min-h-[520px] lg:flex-1">
@@ -143,9 +145,9 @@ export function Globe({
         <Suspense fallback={null}>
           <Earth simRef={simRef} />
         </Suspense>
-        <OrbitRing />
-        <Satellite simRef={simRef} flash={flash} />
-        {jobActive ? <Beam simRef={simRef} /> : null}
+        <OrbitRing key={orbitId} orbitId={orbitId} />
+        <Satellite simRef={simRef} flash={flash} orbitId={orbitId} />
+        {jobActive ? <Beam simRef={simRef} orbitId={orbitId} /> : null}
         {PPIS.map((p) => (
           <Marker key={p.id} lat={p.lat} lon={p.lon} color="#7ec8c5" simRef={simRef} />
         ))}
