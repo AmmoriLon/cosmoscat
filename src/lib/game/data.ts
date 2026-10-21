@@ -34,21 +34,21 @@ export const SYSTEMS: Record<
     code: "РН-Л",
     blurb: "Старая лёгкая ракета. Поднимет кубсат и разгонный блок на низкую орбиту.",
     chips: ["Двигатель", "Баки", "Управление", "Обтекатель"],
-    image: "/game/hardware-rocket.jpg",
+    image: "/game/hardware-rocket-cat.jpg",
   },
   booster: {
     name: "Разгонный блок «Ласточка-Б»",
     code: "РБ",
     blurb: "Доталкивает спутник с низкой орбиты на рабочую, 535 км.",
     chips: ["Двигатель", "Ориентация", "Компьютер", "Стыковка"],
-    image: "/game/hardware-booster.jpg",
+    image: "/game/hardware-booster-cat.jpg",
   },
   sat: {
     name: "Кубсат «Лапка-1»",
     code: "3U / ОПТ",
     blurb: "Маленький аппарат с камерой. Снимает Землю и сбрасывает кадр на ППИ.",
     chips: ["Корпус", "Батареи", "Камера", "Радио"],
-    image: "/game/hardware-sat.jpg",
+    image: "/game/hardware-sat-cat.jpg",
   },
 };
 

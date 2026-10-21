@@ -39,14 +39,17 @@ export function Hangar({
         onClick={() => setOpen(true)}
         className="overflow-hidden rounded-2xl border border-white/10 bg-[#0d121c] text-left"
       >
-        <Image
-          src={focused.image}
-          alt={focused.name}
-          width={720}
-          height={480}
-          className="h-48 w-full object-cover sm:h-64"
-        />
-        <p className="px-3 py-2 text-xs text-zinc-400">Нажми — большая картинка {focused.name}</p>
+        <div className="relative aspect-[4/3] w-full bg-[#0a0e16]">
+          <Image
+            src={focused.image}
+            alt={focused.name}
+            fill
+            sizes="(max-width: 768px) 100vw, 720px"
+            className="object-contain p-2"
+            priority
+          />
+        </div>
+        <p className="px-3 py-2 text-xs text-zinc-400">Весь аппарат в кадре · нажми, если хочешь крупнее</p>
       </button>
 
       <div className="grid gap-2">
@@ -63,13 +66,15 @@ export function Hangar({
                 active ? "border-copper/70 bg-copper/10" : "border-white/10 bg-[#121826]/70"
               }`}
             >
-              <Image
-                src={spec.image}
-                alt=""
-                width={128}
-                height={128}
-                className="h-16 w-16 shrink-0 rounded-xl object-cover"
-              />
+              <div className="relative h-[4.5rem] w-[4.5rem] shrink-0 overflow-hidden rounded-xl bg-[#0a0e16]">
+                <Image
+                  src={spec.image}
+                  alt=""
+                  fill
+                  sizes="72px"
+                  className="object-contain p-0.5"
+                />
+              </div>
               <div className="min-w-0 flex-1">
                 <div className="mb-1 flex items-start justify-between gap-3">
                   <div>
