@@ -18,7 +18,7 @@ export function Intro({
     <div className="flex flex-1 flex-col justify-end gap-5 px-4 pb-6 pt-8 sm:justify-center sm:px-8">
       <div className="mx-auto w-full max-w-lg rounded-3xl border border-white/10 bg-[#121826]/80 p-5 shadow-[0_20px_80px_rgba(0,0,0,0.45)] backdrop-blur-md">
         <div className="mb-4 flex items-center gap-3">
-          <CatPortrait fur={line.fur} hat={line.speaker.includes("президент")} />
+          <CatPortrait name={line.speaker} size={72} />
           <div>
             <p className="font-heading text-lg leading-tight">{line.speaker}</p>
             <p className="text-xs uppercase tracking-[0.18em] text-copper/80">{line.role}</p>

@@ -135,7 +135,7 @@ function ContractCard({
 }) {
   return (
     <div className="flex gap-3 rounded-2xl border border-white/10 bg-[#121826]/70 p-3">
-      <CatPortrait fur={contract.fur} size={48} />
+      <CatPortrait name={contract.client} size={56} />
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <div>

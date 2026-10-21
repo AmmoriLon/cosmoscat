@@ -3,6 +3,19 @@ import type { ContractTemplate, PPI, SystemId } from "./types";
 export const GAME_TITLE = "КБ «Мята»";
 export const SAVE_KEY = "kb-myata-v1";
 
+export const CAT_PORTRAITS: Record<string, string> = {
+  "Кот-президент": "/game/cat-president.jpg",
+  Пыжик: "/game/cat-pyzhik.jpg",
+  Мурка: "/game/cat-murka.jpg",
+  Барсик: "/game/cat-barsik.jpg",
+  Кефир: "/game/cat-kefir.jpg",
+  Снежок: "/game/cat-snezhok.jpg",
+  Василий: "/game/cat-vasiliy.jpg",
+  Рыська: "/game/cat-ryska.jpg",
+  Клык: "/game/cat-klyk.jpg",
+  Сахарок: "/game/cat-sakharok.jpg",
+};
+
 export const EARTH_R = 2;
 export const SAT_ALT = 0.28;
 export const SAT_R = EARTH_R + SAT_ALT;
