@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,8 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { PPIS } from "@/lib/game/data";
-import { renderPhoto } from "@/lib/game/photo";
+import { PHOTO_IMG, PPIS } from "@/lib/game/data";
 import { formatMoney, photoPayout } from "@/lib/game/save";
 import type { Contract, PhotoJob } from "@/lib/game/types";
 
@@ -30,32 +29,37 @@ export function PhotoDialog({
   onSell: () => void;
   onClose: () => void;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const raw = !job || job.stage !== "ready";
   const ppi = PPIS.find((p) => p.id === job?.ppiId);
-
-  useEffect(() => {
-    if (!open || !contract || !canvasRef.current) return;
-    renderPhoto(canvasRef.current, contract, opticsLevel, raw, ppi?.name);
-  }, [open, contract, opticsLevel, raw, ppi?.name, job?.stage]);
+  const src = contract ? PHOTO_IMG[contract.biome] : "";
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-w-[calc(100%-1.25rem)] border-white/10 bg-[#0e1420] sm:max-w-lg" showCloseButton>
         <DialogHeader>
-          <DialogTitle>{raw ? "Сырой поток" : "Товарный снимок"}</DialogTitle>
+          <DialogTitle>{raw ? "Кадр с борта" : "Готовый снимок"}</DialogTitle>
           <DialogDescription>
             {contract
               ? raw
-                ? "Борт пишет некалиброванный кадр. Продавать такое стыдно — сначала ППИ и операторы."
-                : `${contract.client} получит L1, КБ получит деньги.`
+                ? "Камера сняла. Сейчас сбросим на ППИ, операторы соберут чистую картинку."
+                : `${contract.client} получит снимок, КБ — деньги.`
               : "Нет кадра"}
           </DialogDescription>
         </DialogHeader>
-        <canvas
-          ref={canvasRef}
-          className="h-auto w-full rounded-xl ring-1 ring-white/10"
-        />
+        {src ? (
+          <div className="overflow-hidden rounded-xl ring-1 ring-white/10">
+            <Image
+              src={src}
+              alt={contract?.title ?? "снимок"}
+              width={1200}
+              height={900}
+              className={`h-auto w-full object-cover ${raw ? "contrast-75 saturate-50" : ""}`}
+            />
+            <p className="bg-black/50 px-3 py-2 font-mono text-[11px] text-zinc-300">
+              {contract?.title} · {raw ? "сырой кадр" : "товарный снимок"}
+            </p>
+          </div>
+        ) : null}
         <DialogFooter className="sm:justify-between">
           {job?.stage === "ready" && contract ? (
             <Button className="h-11 w-full sm:w-auto" onClick={onSell}>
@@ -66,8 +70,8 @@ export function PhotoDialog({
               {job?.stage === "downlink"
                 ? `Сброс на ${ppi?.name ?? "ППИ"}…`
                 : job?.stage === "processing"
-                  ? "Операторы делают радиометрию и привязку…"
-                  : "Кадр на борту. Ждём зону радиовидимости."}
+                  ? "Операторы собирают снимок…"
+                  : "Кадр на борту. Ждём ППИ."}
             </p>
           )}
         </DialogFooter>

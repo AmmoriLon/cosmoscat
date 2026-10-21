@@ -19,12 +19,12 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "КБ «Сфера» — Генконструктор",
+  title: "КБ «Мята» — Генконструктор",
   description:
     "Мобильный кликер: котята строят ракеты, кубсаты и продают снимки с орбиты.",
   appleWebApp: {
     capable: true,
-    title: "КБ Сфера",
+    title: "КБ Мята",
     statusBarStyle: "black-translucent",
   },
 };

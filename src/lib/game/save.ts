@@ -36,7 +36,7 @@ export function freshState(): GameState {
       {
         id: uid("log"),
         t: Date.now(),
-        text: "Архив КБ открыт. В ангаре — списанный носитель и отдел инженеров.",
+        text: "Архив КБ «Мята» открыт. В ангаре — команда и прототип.",
       },
     ],
     launchT: 0,
