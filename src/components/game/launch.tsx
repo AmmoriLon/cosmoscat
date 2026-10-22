@@ -77,15 +77,15 @@ export function Launch({ t, craft }: { t: number; craft: Craft | null }) {
             />
             {ignite
               ? [
-                  { left: "50%", w: 22 + lift * 8, h: 46 + lift * 26 },
-                  { left: "22%", w: 12 + lift * 5, h: 28 + lift * 16 },
-                  { left: "78%", w: 12 + lift * 5, h: 28 + lift * 16 },
+                  { left: "50%", top: "88.4%", w: 26 + lift * 10, h: 52 + lift * 30 },
+                  { left: "34%", top: "89.0%", w: 14 + lift * 6, h: 34 + lift * 18 },
+                  { left: "66%", top: "89.0%", w: 14 + lift * 6, h: 34 + lift * 18 },
                 ].map((f, i) => (
                   <div
                     key={i}
                     className="rocket-flame"
                     style={{
-                      top: "88.6%",
+                      top: f.top,
                       left: f.left,
                       width: f.w,
                       height: f.h,
