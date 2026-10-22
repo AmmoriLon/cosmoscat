@@ -55,6 +55,8 @@ export function FleetPanel({
   }
 
   const active = activeCraft(state);
+  const flying = state.crafts.filter((craft) => craft.status === "alive");
+  const archived = state.crafts.filter((craft) => craft.status !== "alive");
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-3 px-3 pb-24 pt-3">
@@ -62,7 +64,7 @@ export function FleetPanel({
         <div>
           <p className="font-heading text-lg">Космические аппараты</p>
           <p className="text-xs text-zinc-500">
-            {state.crafts.filter((c) => c.status === "alive").length} на орбите
+            {flying.length} на орбите
             {active ? ` · в работе «${active.name}»` : ""}
           </p>
         </div>
@@ -71,84 +73,131 @@ export function FleetPanel({
         </Button>
       </div>
 
-      {state.crafts.length === 0 ? (
+      {flying.length === 0 ? (
         <p className="rounded-2xl border border-white/10 bg-[#121826]/70 p-4 text-sm text-zinc-400">
-          Флот пуст. Первый прототип ещё в ангаре — или собери новый за ккр.
+          На орбите пусто. Первый прототип ещё в ангаре — или собери новый за ккр.
         </p>
       ) : null}
 
       <div className="grid gap-2">
-        {state.crafts.map((craft) => {
-          const left = craftLeft(craft, state.timeSec);
-          const used = craftJobs(state, craft.id).length;
-          const slots = craftSlots(craft);
-          const selected = state.activeCraftId === craft.id;
-          const dead = craft.status !== "alive";
-          const alarm = craft.events.length > 0 && !dead;
-          return (
-            <div
-              key={craft.id}
-              className={`rounded-2xl border p-3 ${
-                dead
-                  ? "border-white/5 bg-[#121826]/40 opacity-70"
-                  : alarm
-                    ? "border-red-400/40 bg-red-500/8"
-                    : selected
-                      ? "border-copper/70 bg-copper/10"
-                      : "border-white/10 bg-[#121826]/70"
-              }`}
-            >
-              <button type="button" onClick={() => onInspect(craft.id)} className="w-full text-left">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="flex items-center gap-1.5 font-heading text-[15px]">
-                      {craft.name}
-                      {alarm ? <AlertTriangle className="size-4 animate-pulse text-red-300" aria-label="выходит из строя" /> : null}
-                    </p>
-                    <p className="font-mono text-[10px] text-teal/80">
-                      {orbitLabel(craft.orbit)} · {hullLabel(craft)}
-                    </p>
-                  </div>
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
-                    {dead ? craftStatusLabel(craft) : selected ? "в работе" : "на орбите"}
-                  </p>
-                </div>
-                <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-zinc-400">
-                  <div>
-                    <dt className="text-zinc-600">Съёмка</dt>
-                    <dd>{cameraLabel(craft.cameras)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-zinc-600">БЗУ</dt>
-                    <dd>
-                      {used}/{slots} кадр.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-zinc-600">Срок</dt>
-                    <dd>{dead ? craftStatusLabel(craft) : `ещё ${formatSpan(left)}`}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-zinc-600">Накл.</dt>
-                    <dd>{ORBITS[craft.orbit].inc}°</dd>
-                  </div>
-                </dl>
-                {alarm ? (
-                  <p className="mt-2 text-[11px] text-red-300">
-                    {craft.events[craft.events.length - 1]?.title}
-                  </p>
-                ) : null}
-                <p className="mt-2 font-mono text-[10px] text-zinc-600">тап — телеметрия</p>
-              </button>
-              {!dead && !selected ? (
-                <Button size="sm" variant="outline" className="mt-2 w-full" onClick={() => onSelect(craft.id)}>
-                  Вести этот КА
-                </Button>
-              ) : null}
-            </div>
-          );
-        })}
+        {flying.map((craft) => (
+          <CraftCard
+            key={craft.id}
+            craft={craft}
+            state={state}
+            selected={state.activeCraftId === craft.id}
+            archived={false}
+            onInspect={onInspect}
+            onSelect={onSelect}
+          />
+        ))}
       </div>
+
+      {archived.length ? (
+        <section className="mt-2 grid gap-2">
+          <div>
+            <p className="font-heading text-base">Архив</p>
+            <p className="text-xs text-zinc-500">Списанные аппараты. Аварий и всплывашек по ним больше нет.</p>
+          </div>
+          {archived.map((craft) => (
+            <CraftCard
+              key={craft.id}
+              craft={craft}
+              state={state}
+              selected={false}
+              archived
+              onInspect={onInspect}
+              onSelect={onSelect}
+            />
+          ))}
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function CraftCard({
+  craft,
+  state,
+  selected,
+  archived,
+  onInspect,
+  onSelect,
+}: {
+  craft: GameState["crafts"][number];
+  state: GameState;
+  selected: boolean;
+  archived: boolean;
+  onInspect: (id: string) => void;
+  onSelect: (id: string) => void;
+}) {
+  const left = craftLeft(craft, state.timeSec);
+  const used = craftJobs(state, craft.id).length;
+  const slots = craftSlots(craft);
+  const broken = craft.status === "failed";
+  const alarm = !archived && craft.events.length > 0;
+  return (
+    <div
+      className={`rounded-2xl border p-3 ${
+        archived
+          ? "border-white/5 bg-[#121826]/40 opacity-80"
+          : alarm
+            ? "border-red-400/40 bg-red-500/8"
+            : selected
+              ? "border-copper/70 bg-copper/10"
+              : "border-white/10 bg-[#121826]/70"
+      }`}
+    >
+      <button type="button" onClick={() => onInspect(craft.id)} className="w-full text-left">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="flex items-center gap-1.5 font-heading text-[15px]">
+              {craft.name}
+              {broken ? (
+                <AlertTriangle className="size-4 text-red-400" aria-label="вышел из строя" />
+              ) : alarm ? (
+                <AlertTriangle className="size-4 animate-pulse text-red-300" aria-label="выходит из строя" />
+              ) : null}
+            </p>
+            <p className="font-mono text-[10px] text-teal/80">
+              {orbitLabel(craft.orbit)} · {hullLabel(craft)}
+            </p>
+          </div>
+          <p className={`font-mono text-[10px] uppercase tracking-wider ${broken ? "text-red-300" : "text-zinc-500"}`}>
+            {archived ? craftStatusLabel(craft) : selected ? "в работе" : "на орбите"}
+          </p>
+        </div>
+        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-zinc-400">
+          <div>
+            <dt className="text-zinc-600">Съёмка</dt>
+            <dd>{cameraLabel(craft.cameras)}</dd>
+          </div>
+          <div>
+            <dt className="text-zinc-600">БЗУ</dt>
+            <dd>
+              {used}/{slots} кадр.
+            </dd>
+          </div>
+          <div>
+            <dt className="text-zinc-600">Срок</dt>
+            <dd>{archived ? craftStatusLabel(craft) : `ещё ${formatSpan(left)}`}</dd>
+          </div>
+          <div>
+            <dt className="text-zinc-600">Накл.</dt>
+            <dd>{ORBITS[craft.orbit].inc}°</dd>
+          </div>
+        </dl>
+        {alarm ? (
+          <p className="mt-2 text-[11px] text-red-300">{craft.events[craft.events.length - 1]?.title}</p>
+        ) : null}
+        {broken ? <p className="mt-2 text-[11px] text-red-300/80">В архиве. Больше не тревожим.</p> : null}
+        {!archived ? <p className="mt-2 font-mono text-[10px] text-zinc-600">тап — телеметрия</p> : null}
+      </button>
+      {!archived && !selected ? (
+        <Button size="sm" variant="outline" className="mt-2 w-full" onClick={() => onSelect(craft.id)}>
+          Вести этот КА
+        </Button>
+      ) : null}
     </div>
   );
 }

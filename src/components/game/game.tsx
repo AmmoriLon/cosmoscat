@@ -205,7 +205,7 @@ export function Game() {
 }
 
 function alarmedCrafts(crafts: Craft[]) {
-  return crafts.filter((c) => c.events.length > 0 && c.status !== "reentry");
+  return crafts.filter((c) => c.status === "alive" && c.events.length > 0);
 }
 
 function AlarmMark({ crafts, onOpen }: { crafts: Craft[]; onOpen: (id: string) => void }) {
@@ -224,7 +224,7 @@ function AlarmMark({ crafts, onOpen }: { crafts: Craft[]; onOpen: (id: string) =
   );
 }
 
-type AlarmToast = { id: string; name: string; title: string; dead: boolean };
+type AlarmToast = { id: string; craftId: string; name: string; title: string };
 
 function FailureToasts({ crafts }: { crafts: Craft[] }) {
   const [toasts, setToasts] = useState<AlarmToast[]>([]);
@@ -239,26 +239,31 @@ function FailureToasts({ crafts }: { crafts: Craft[] }) {
   }, []);
 
   useEffect(() => {
+    const alive = new Set(crafts.filter((craft) => craft.status === "alive").map((craft) => craft.id));
+    for (const craft of crafts) {
+      if (craft.status === "alive") continue;
+      for (const event of craft.events) seen.current.add(event.id);
+    }
     const items: AlarmToast[] = [];
     for (const craft of crafts) {
-      if (craft.status === "reentry") continue;
+      if (craft.status !== "alive") continue;
       for (const event of craft.events) {
         items.push({
           id: event.id,
+          craftId: craft.id,
           name: craft.name,
           title: event.title,
-          dead: craft.status === "failed",
         });
       }
     }
     if (!ready.current) {
-      seen.current = new Set(items.map((item) => item.id));
+      seen.current = new Set([...seen.current, ...items.map((item) => item.id)]);
+      setToasts((prev) => prev.filter((toast) => alive.has(toast.craftId)));
       return;
     }
     const fresh = items.filter((item) => !seen.current.has(item.id));
-    if (!fresh.length) return;
     fresh.forEach((item) => seen.current.add(item.id));
-    setToasts((prev) => [...prev, ...fresh].slice(-3));
+    setToasts((prev) => [...prev.filter((toast) => alive.has(toast.craftId)), ...fresh].slice(-3));
   }, [crafts]);
 
   const dismiss = useCallback((id: string) => {
@@ -321,9 +326,7 @@ function AlarmToastCard({ toast, onDismiss }: { toast: AlarmToast; onDismiss: (i
     >
       <AlertTriangle className="size-5 shrink-0 text-red-100" aria-hidden />
       <span className="min-w-0">
-        <span className="block text-sm font-medium text-red-50">
-          «{toast.name}» {toast.dead ? "вышел из строя" : "выходит из строя"}
-        </span>
+        <span className="block text-sm font-medium text-red-50">«{toast.name}» выходит из строя</span>
         <span className="block truncate text-xs text-red-100/85">{toast.title}</span>
       </span>
     </div>

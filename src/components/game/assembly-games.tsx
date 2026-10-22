@@ -50,6 +50,28 @@ function useStable(fn: (score: number) => void) {
   return useCallback((score: number) => ref.current(score), []);
 }
 
+function useEdgeFlash() {
+  const [tone, setTone] = useState<"good" | "bad" | null>(null);
+  const timer = useRef(0);
+  const ping = useCallback((good: boolean) => {
+    window.clearTimeout(timer.current);
+    setTone(good ? "good" : "bad");
+    timer.current = window.setTimeout(() => setTone(null), 480);
+  }, []);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  return { tone, ping };
+}
+
+function EdgeGlow({ tone }: { tone: "good" | "bad" | null }) {
+  if (!tone) return null;
+  return (
+    <div
+      aria-hidden
+      className={`pointer-events-none fixed inset-0 z-40 ${tone === "good" ? "edge-good" : "edge-bad"}`}
+    />
+  );
+}
+
 function rim(deg: number, r: number) {
   const rad = (deg * Math.PI) / 180;
   return { x: 50 + r * Math.sin(rad), y: 50 - r * Math.cos(rad) };
@@ -71,6 +93,7 @@ function GearGame({ onDone }: { onDone: (score: number) => void }) {
   const [angle, setAngle] = useState(210);
   const [zone, setZone] = useState({ start: 36, width: 88 });
   const [flash, setFlash] = useState<string | null>(null);
+  const { tone, ping } = useEdgeFlash();
   const [pop, setPop] = useState(0);
   const scores = useRef<number[]>([]);
   const angleRef = useRef(210);
@@ -87,6 +110,7 @@ function GearGame({ onDone }: { onDone: (score: number) => void }) {
     if (locked.current) return;
     locked.current = true;
     scores.current.push(score);
+    ping(score > 0);
     setFlash(label);
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(score ? 12 : 28);
     window.setTimeout(() => {
@@ -137,6 +161,7 @@ function GearGame({ onDone }: { onDone: (score: number) => void }) {
 
   return (
     <div className="flex flex-1 flex-col items-center">
+      <EdgeGlow tone={tone} />
       <h2 className="font-heading mt-3 text-xl">Шестерня</h2>
       <p className="mt-1 text-center text-sm text-zinc-400">
         Кружок вылетает. Жми, когда шестерёнка в медной полосе.
@@ -195,6 +220,9 @@ function BoltsGame({ onDone }: { onDone: (score: number) => void }) {
   const [left, setLeft] = useState(10);
   const tally = useRef({ good: 0, hit: 0, badTap: 0 });
   const spawn = useRef<{ id: number; cell: number; bad: boolean } | null>(null);
+  const { tone, ping } = useEdgeFlash();
+  const pingRef = useRef(ping);
+  pingRef.current = ping;
 
   useEffect(() => {
     let cancel = false;
@@ -225,6 +253,7 @@ function BoltsGame({ onDone }: { onDone: (score: number) => void }) {
       setNote(isBad ? "Брак — не жми" : "Болт — жми");
       later(isBad ? 760 : Math.max(520, 980 - i * 45), () => {
         if (spawn.current?.id === item.id) {
+          if (!item.bad) pingRef.current(false);
           spawn.current = null;
           setCell(null);
         }
@@ -240,6 +269,7 @@ function BoltsGame({ onDone }: { onDone: (score: number) => void }) {
 
   return (
     <div className="flex flex-1 flex-col">
+      <EdgeGlow tone={tone} />
       <h2 className="font-heading mt-3 text-xl">Болты</h2>
       <p className="mt-1 text-sm text-zinc-400">Жми живой болт, пока не погас. Красный брак не трогай.</p>
       <p className="mt-2 font-mono text-[11px] text-zinc-500">
@@ -261,9 +291,11 @@ function BoltsGame({ onDone }: { onDone: (score: number) => void }) {
                 if (cur.bad) {
                   tally.current.badTap += 1;
                   setNote("Схватил брак");
+                  ping(false);
                 } else {
                   tally.current.hit += 1;
                   setNote("Поймал");
+                  ping(true);
                 }
                 if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
               }}
@@ -290,6 +322,9 @@ function FlashGame({ onDone }: { onDone: (score: number) => void }) {
   const [doneCount, setDoneCount] = useState(0);
   const phase = useRef<{ kind: "wait" | "go" | "nogo"; tapped: boolean }>({ kind: "wait", tapped: false });
   const scoreApi = useRef<{ hit: () => void; bad: () => void } | null>(null);
+  const { tone, ping } = useEdgeFlash();
+  const pingRef = useRef(ping);
+  pingRef.current = ping;
 
   useEffect(() => {
     let cancel = false;
@@ -328,6 +363,7 @@ function FlashGame({ onDone }: { onDone: (score: number) => void }) {
         phase.current = { kind, tapped: false };
         setShown(kind);
         later(680, () => {
+          if (kind === "go" && !phase.current.tapped) pingRef.current(false);
           setDoneCount(index);
           step();
         });
@@ -351,6 +387,7 @@ function FlashGame({ onDone }: { onDone: (score: number) => void }) {
 
   return (
     <div className="flex flex-1 flex-col items-center">
+      <EdgeGlow tone={tone} />
       <h2 className="font-heading mt-3 text-xl">Искра</h2>
       <p className="mt-1 text-center text-sm text-zinc-400">Жми бирюзовую. Красную не трогай — это короткое.</p>
       <p className="mt-2 font-mono text-[11px] text-zinc-500">{doneCount}/12</p>
@@ -361,8 +398,13 @@ function FlashGame({ onDone }: { onDone: (score: number) => void }) {
           const cur = phase.current;
           if (cur.tapped || cur.kind === "wait") return;
           cur.tapped = true;
-          if (cur.kind === "go") scoreApi.current?.hit();
-          else scoreApi.current?.bad();
+          if (cur.kind === "go") {
+            scoreApi.current?.hit();
+            ping(true);
+          } else {
+            scoreApi.current?.bad();
+            ping(false);
+          }
           if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(cur.kind === "go" ? 10 : 30);
           setShown(cur.kind);
         }}
