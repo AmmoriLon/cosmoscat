@@ -9,7 +9,7 @@ import {
   craftLifeSec,
   hullFromSpec,
 } from "./data";
-import type { Contract, Craft, GameState, PhotoJob, SystemId } from "./types";
+import type { CameraId, Contract, Craft, GameState, PhotoJob, SystemId } from "./types";
 
 export function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
@@ -30,7 +30,8 @@ export function pickContracts(used: string[], count: number): Contract[] {
 
 export function normalizeCraft(raw: Partial<Craft>, launchedAt = 0): Craft {
   const orbit = raw.orbit && ORBITS[raw.orbit] ? raw.orbit : "sso535";
-  const cameras = Array.isArray(raw.cameras) && raw.cameras.length ? raw.cameras : ["opt"];
+  const cameras: CameraId[] =
+    Array.isArray(raw.cameras) && raw.cameras.length ? raw.cameras : ["opt"];
   const memory = raw.memory && MEMORIES[raw.memory] ? raw.memory : "bzu1";
   return {
     id: raw.id ?? uid("craft"),

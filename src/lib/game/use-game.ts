@@ -493,7 +493,7 @@ export function useGame() {
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   const tap = useCallback(() => {
