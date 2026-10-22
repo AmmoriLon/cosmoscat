@@ -103,6 +103,8 @@ export const ORBITS: Record<
     raan: number;
     periAlt: number;
     apoAlt: number;
+    periKm: number;
+    apoKm: number;
     period: number;
     maxLat: number;
     cost: number;
@@ -118,6 +120,8 @@ export const ORBITS: Record<
     raan: 28,
     periAlt: 0.28,
     apoAlt: 0.28,
+    periKm: 535,
+    apoKm: 535,
     period: 36,
     maxLat: 90,
     cost: 1400,
@@ -132,6 +136,8 @@ export const ORBITS: Record<
     raan: 0,
     periAlt: 0.18,
     apoAlt: 0.18,
+    periKm: 400,
+    apoKm: 400,
     period: 28,
     maxLat: 22,
     cost: 900,
@@ -146,6 +152,8 @@ export const ORBITS: Record<
     raan: 12,
     periAlt: 0.42,
     apoAlt: 0.42,
+    periKm: 800,
+    apoKm: 800,
     period: 48,
     maxLat: 90,
     cost: 2400,
@@ -160,6 +168,8 @@ export const ORBITS: Record<
     raan: 40,
     periAlt: 0.22,
     apoAlt: 0.86,
+    periKm: 350,
+    apoKm: 1450,
     period: 44,
     maxLat: 82,
     cost: 3000,

@@ -241,7 +241,7 @@ function Satellite({
     const p = satEci(a, craft.orbit);
     ref.current.position.set(p.x, p.y, p.z);
     ref.current.lookAt(0, 0, 0);
-    const pulse = selected && flash > 0 && performance.now() - flash < 500 ? 1.35 : selected ? 1.12 : 1;
+    const pulse = selected && flash > 0 && performance.now() - flash < 500 ? 1.55 : selected ? 1.25 : 1;
     ref.current.scale.setScalar(pulse);
   });
   return (
@@ -252,9 +252,15 @@ function Satellite({
         onInspect(craft.id);
       }}
     >
-      <CraftMesh hull={craft.hull} tint={hullTint(craft.id)} />
+      <group scale={2.15}>
+        <CraftMesh hull={craft.hull} tint={hullTint(craft.id)} />
+      </group>
       <mesh>
-        <sphereGeometry args={[0.085, 10, 10]} />
+        <sphereGeometry args={[0.035, 10, 10]} />
+        <meshBasicMaterial color={ORBITS[craft.orbit].ring} toneMapped={false} />
+      </mesh>
+      <mesh>
+        <sphereGeometry args={[0.16, 10, 10]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
     </group>
