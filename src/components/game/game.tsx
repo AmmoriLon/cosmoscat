@@ -1,10 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GAME_TITLE } from "@/lib/game/data";
 import { formatBureauClock, formatMoney } from "@/lib/game/save";
 import { useGame } from "@/lib/game/use-game";
+import type { Craft } from "@/lib/game/types";
+import { AssemblyGames } from "./assembly-games";
 import { BureauSheet } from "./bureau-sheet";
 import { FleetPanel } from "./fleet";
 import { Globe } from "./globe";
@@ -74,6 +77,14 @@ export function Game() {
       {state.phase === "launch" ? <Launch t={state.launchT} craft={state.pendingCraft} /> : null}
 
       {state.phase === "ops" ? (
+        <FailureStrip crafts={state.crafts} onOpen={(id) => setInspectId(id)} />
+      ) : null}
+
+      {state.phase === "ops" && state.assembly ? (
+        <AssemblyGames state={state} onScore={actions.finishMinigame} onLaunch={actions.launchBuilt} />
+      ) : null}
+
+      {state.phase === "ops" && !state.assembly ? (
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           {state.tab === "contracts" ? (
             <Globe
@@ -116,14 +127,13 @@ export function Game() {
                 onMemory={actions.setMemory}
                 onToggleCamera={actions.toggleCamera}
                 onCommit={actions.commitBuild}
-                onTapAssemble={actions.tapAssemble}
               />
             )}
           </div>
         </div>
       ) : null}
 
-      {state.phase === "ops" ? (
+      {state.phase === "ops" && !state.assembly ? (
         <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#0b1018]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
           <div className="mx-auto grid max-w-3xl grid-cols-2 gap-1 p-2">
             <Button
@@ -138,7 +148,10 @@ export function Game() {
               className="h-11"
               onClick={() => actions.setTab("fleet")}
             >
-              {state.assembly ? `Сборка ${Math.floor(state.assembly.progress)}%` : "Аппараты"}
+              Аппараты
+              {state.crafts.some((c) => c.status === "alive" && c.events.length > 0) ? (
+                <AlertTriangle className="size-4 text-red-300" />
+              ) : null}
             </Button>
           </div>
         </nav>
@@ -184,6 +197,35 @@ export function Game() {
           setInspectId(null);
         }}
       />
+    </div>
+  );
+}
+
+function FailureStrip({ crafts, onOpen }: { crafts: Craft[]; onOpen: (id: string) => void }) {
+  const alarmed = crafts.filter((c) => c.events.length > 0 && c.status !== "reentry");
+  if (!alarmed.length) return null;
+  return (
+    <div className="grid gap-2 px-3 pt-1">
+      {alarmed.slice(0, 3).map((craft) => {
+        const last = craft.events[craft.events.length - 1];
+        const dead = craft.status === "failed";
+        return (
+          <button
+            key={craft.id}
+            type="button"
+            onClick={() => onOpen(craft.id)}
+            className="flex items-center gap-3 rounded-2xl border border-red-400/70 bg-red-600/30 px-3 py-2.5 text-left shadow-[0_0_28px_rgba(220,38,38,0.28)]"
+          >
+            <AlertTriangle className="size-6 shrink-0 animate-pulse text-red-100" aria-hidden />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-red-50">
+                «{craft.name}» {dead ? "вышел из строя" : "выходит из строя"}
+              </span>
+              <span className="block truncate text-xs text-red-100/85">{last?.title}</span>
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
+import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { CAMERAS, HULLS, MEMORIES, ORBITS, buildCost, hullFromSpec } from "@/lib/game/data";
 import {
   activeCraft,
@@ -28,7 +28,6 @@ export function FleetPanel({
   onMemory,
   onToggleCamera,
   onCommit,
-  onTapAssemble,
 }: {
   state: GameState;
   onInspect: (id: string) => void;
@@ -40,7 +39,6 @@ export function FleetPanel({
   onMemory: (id: MemoryId) => void;
   onToggleCamera: (id: CameraId) => void;
   onCommit: () => void;
-  onTapAssemble: () => void;
 }) {
   if (state.workshop) {
     return (
@@ -54,10 +52,6 @@ export function FleetPanel({
         onClose={onCloseWorkshop}
       />
     );
-  }
-
-  if (state.assembly) {
-    return <AssemblyBay state={state} onTap={onTapAssemble} />;
   }
 
   const active = activeCraft(state);
@@ -107,7 +101,10 @@ export function FleetPanel({
               <button type="button" onClick={() => onInspect(craft.id)} className="w-full text-left">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="font-heading text-[15px]">{craft.name}</p>
+                    <p className="flex items-center gap-1.5 font-heading text-[15px]">
+                      {craft.name}
+                      {alarm ? <AlertTriangle className="size-4 animate-pulse text-red-300" aria-label="выходит из строя" /> : null}
+                    </p>
                     <p className="font-mono text-[10px] text-teal/80">
                       {orbitLabel(craft.orbit)} · {hullLabel(craft)}
                     </p>
@@ -156,56 +153,6 @@ export function FleetPanel({
   );
 }
 
-function AssemblyBay({ state, onTap }: { state: GameState; onTap: () => void }) {
-  const a = state.assembly;
-  if (!a) return null;
-  const craft = a.craft;
-  const hull = HULLS[craft.hull];
-
-  return (
-    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-3 pb-24 pt-3">
-      <div>
-        <p className="font-heading text-lg">Сборка «{craft.name}»</p>
-        <p className="text-xs text-zinc-500">
-          Инженеры паяют сами. Тап ускоряет закладку корпуса, панелей и БЗУ.
-        </p>
-      </div>
-
-      <div className="rounded-2xl border border-white/10 bg-[#121826] p-4">
-        <p className="font-mono text-[11px] text-teal">{hull.name}</p>
-        <p className="mt-1 text-sm text-zinc-300">
-          {ORBITS[craft.orbit].name} · {cameraLabel(craft.cameras)} · {MEMORIES[craft.memory].name}
-        </p>
-        <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
-          <span>Готовность</span>
-          <span className="font-mono text-copper">{Math.floor(a.progress)}%</span>
-        </div>
-        <Progress value={a.progress} className="mt-1 gap-0" />
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {["Корпус", "Панели", "Камеры", "БЗУ", "Радио"].map((chip, i) => {
-            const on = a.progress >= (i + 1) * 20;
-            return (
-              <span
-                key={chip}
-                className={`rounded-full px-2 py-0.5 font-mono text-[10px] ${
-                  on ? "bg-teal/15 text-teal" : "bg-white/5 text-zinc-500"
-                }`}
-              >
-                {chip}
-              </span>
-            );
-          })}
-        </div>
-      </div>
-
-      <Button className="tap-btn h-16 w-full text-lg" onClick={onTap}>
-        Паять · {craft.name}
-      </Button>
-      <p className="text-center text-xs text-zinc-500">На 100% аппарат сам уедет на старт.</p>
-    </div>
-  );
-}
-
 function Workshop({
   state,
   onName,
@@ -235,7 +182,7 @@ function Workshop({
         <div>
           <p className="font-heading text-lg">Новый аппарат</p>
           <p className="text-xs text-zinc-500">
-            Плата сразу. Сборка не мгновенная — потом паяем и только после этого старт.
+            Плата сразу. Дальше три проверки на реакцию: от них зависит, сколько аппарат проживёт.
           </p>
         </div>
         <Button variant="ghost" size="sm" onClick={onClose}>

@@ -9,7 +9,18 @@ import {
   craftLifeSec,
   hullFromSpec,
 } from "./data";
-import type { CameraId, Contract, Craft, GameState, PhotoJob, SystemId } from "./types";
+import type {
+  Assembly,
+  AssemblyStep,
+  BuildGrade,
+  CameraId,
+  Contract,
+  Craft,
+  GameState,
+  OrbitId,
+  PhotoJob,
+  SystemId,
+} from "./types";
 
 export function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
@@ -128,9 +139,7 @@ export function migrateState(raw: Partial<GameState> & { job?: PhotoJob | null }
   }
   merged.tab = raw.tab === "fleet" ? "fleet" : "contracts";
   merged.workshop = raw.workshop ?? null;
-  merged.assembly = raw.assembly
-    ? { craft: normalizeCraft(raw.assembly.craft, merged.timeSec), progress: raw.assembly.progress ?? 0 }
-    : null;
+  merged.assembly = normalizeAssembly(raw.assembly, merged.timeSec);
   merged.pendingCraft = raw.pendingCraft ? normalizeCraft(raw.pendingCraft, merged.timeSec) : null;
   merged.contracts = (merged.contracts ?? []).map((c) => ({ ...c, camera: c.camera ?? "opt" }));
   return merged;
@@ -199,6 +208,52 @@ export function craftSlots(craft: Craft) {
 export function craftJobs(state: GameState, craftId: string) {
   return state.jobs.filter((j) => j.craftId === craftId);
 }
+
+const ASSEMBLY_STEPS: AssemblyStep[] = ["gear", "bolts", "flash", "verdict"];
+
+export function normalizeAssembly(
+  raw: { craft?: Partial<Craft>; step?: AssemblyStep; scores?: number[] } | null | undefined,
+  launchedAt = 0,
+): Assembly | null {
+  if (!raw?.craft) return null;
+  const step = raw.step && ASSEMBLY_STEPS.includes(raw.step) ? raw.step : "gear";
+  const scores = Array.isArray(raw.scores) ? raw.scores.filter((n) => typeof n === "number").slice(0, 3) : [];
+  return { craft: normalizeCraft(raw.craft, launchedAt), step, scores };
+}
+
+export function buildAverage(scores: number[]) {
+  if (!scores.length) return 0;
+  return scores.reduce((sum, n) => sum + n, 0) / scores.length;
+}
+
+export function buildGrade(scores: number[]): BuildGrade {
+  const avg = buildAverage(scores);
+  if (avg >= 72) return "good";
+  if (avg >= 42) return "mid";
+  return "bad";
+}
+
+export function lifeCutForBuild(orbit: OrbitId, scores: number[]) {
+  const life = craftLifeSec(orbit);
+  const avg = buildAverage(scores);
+  const grade = buildGrade(scores);
+  if (grade === "good") {
+    const bonus = 0.28 + ((avg - 72) / 28) * 0.22;
+    return -life * Math.min(0.5, Math.max(0.28, bonus));
+  }
+  if (grade === "mid") {
+    const cut = 0.12 + ((72 - avg) / 30) * 0.16;
+    return life * Math.min(0.3, Math.max(0.12, cut));
+  }
+  const cut = 0.4 + ((42 - avg) / 42) * 0.2;
+  return life * Math.min(0.62, Math.max(0.4, cut));
+}
+
+export const BUILD_VERDICT: Record<BuildGrade, string> = {
+  good: "Отличная работа. Пайка чистая, допуски в норме. Такой спутник прослужит намного дольше.",
+  mid: "Собрали невнимательно. Полетит, но ресурс уже съеден — работать будет меньше.",
+  bad: "Ты куда смотрел? Аппарат долго не проживёт. Я бы его со стола не снимал.",
+};
 
 export function craftLeft(craft: Craft, timeSec: number) {
   if (craft.status === "reentry" || craft.status === "failed") return 0;

@@ -2,13 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
-  ENGINEER_ASSEMBLE_PER_S,
   ENGINEER_REPAIR_PER_S,
   FAILURES,
   LAUNCH_END_S,
   ORBITS,
   PPIS,
-  TAP_ASSEMBLE,
   TAP_REPAIR,
   UPGRADES,
   buildCost,
@@ -34,6 +32,9 @@ import {
   craftLeft,
   craftSlots,
   freshState,
+  lifeCutForBuild,
+  BUILD_VERDICT,
+  buildGrade,
   loadState,
   makeLapka,
   nextCraftName,
@@ -69,8 +70,8 @@ type Action =
   | { type: "CLOSE_WORKSHOP" }
   | { type: "EDIT_WORKSHOP"; draft: Partial<WorkshopDraft> }
   | { type: "COMMIT_BUILD" }
-  | { type: "TAP_ASSEMBLE" }
-  | { type: "ASSEMBLE_TICK"; dt: number }
+  | { type: "FINISH_MINIGAME"; score: number }
+  | { type: "LAUNCH_BUILT" }
   | { type: "RESET" };
 
 function applyReentries(state: GameState): GameState {
@@ -131,9 +132,12 @@ function rollFailures(state: GameState, dt: number): GameState {
   return applyReentries({ ...next, crafts });
 }
 
+const GAME_ORDER = ["gear", "bolts", "flash", "verdict"] as const;
+
 function launchFromAssembly(state: GameState): GameState {
   if (!state.assembly) return state;
   const craft = state.assembly.craft;
+  const grade = buildGrade(state.assembly.scores);
   return addLog(
     {
       ...state,
@@ -143,7 +147,7 @@ function launchFromAssembly(state: GameState): GameState {
       launchT: 0,
       tab: "contracts",
     },
-    `«${craft.name}» собран. Вывоз на старт.`,
+    `«${craft.name}» собран. ${BUILD_VERDICT[grade]}`,
   );
 }
 
@@ -379,25 +383,27 @@ function reducer(state: GameState, action: Action): GameState {
           ...state,
           money: state.money - cost,
           workshop: null,
-          assembly: { craft, progress: 4 },
+          assembly: { craft, step: "gear", scores: [] },
           tab: "fleet",
         },
-        `Закладка «${name}». ${formatBuildLine(draft)} Инженеры паяют, можно помочь.`,
+        `Закладка «${name}». ${formatBuildLine(draft)} Сборка — на внимательность.`,
       );
     }
-    case "TAP_ASSEMBLE": {
-      if (!state.assembly || state.phase !== "ops") return state;
-      const progress = Math.min(100, state.assembly.progress + TAP_ASSEMBLE);
-      const next = { ...state, assembly: { ...state.assembly, progress } };
-      if (progress >= 100) return launchFromAssembly(next);
-      return next;
+    case "FINISH_MINIGAME": {
+      if (!state.assembly || state.assembly.step === "verdict") return state;
+      const score = Math.max(0, Math.min(100, action.score));
+      const scores = [...state.assembly.scores, score].slice(0, 3);
+      const idx = GAME_ORDER.indexOf(state.assembly.step);
+      const step = GAME_ORDER[Math.min(GAME_ORDER.length - 1, idx + 1)] ?? "verdict";
+      return { ...state, assembly: { ...state.assembly, scores, step } };
     }
-    case "ASSEMBLE_TICK": {
-      if (!state.assembly || state.phase !== "ops") return state;
-      const progress = Math.min(100, state.assembly.progress + ENGINEER_ASSEMBLE_PER_S * action.dt);
-      const next = { ...state, assembly: { ...state.assembly, progress } };
-      if (progress >= 100) return launchFromAssembly(next);
-      return next;
+    case "LAUNCH_BUILT": {
+      if (!state.assembly || state.assembly.step !== "verdict") return state;
+      const craft = {
+        ...state.assembly.craft,
+        lifeCut: lifeCutForBuild(state.assembly.craft.orbit, state.assembly.scores),
+      };
+      return launchFromAssembly({ ...state, assembly: { ...state.assembly, craft } });
     }
     case "RESET":
       return freshState();
@@ -485,7 +491,6 @@ export function useGame() {
           if (snap.anomaly < prevAnomaly.current) dispatch({ type: "ORBIT" });
           prevAnomaly.current = snap.anomaly;
           dispatch({ type: "TIME", dt: step });
-          if (s.assembly) dispatch({ type: "ASSEMBLE_TICK", dt: step });
           if (s.jobs.length) dispatch({ type: "JOB_TICK", dt: step, ppiIds: snap.inPpi });
           setSim({ ...snap });
         }
@@ -498,11 +503,6 @@ export function useGame() {
 
   const tap = useCallback(() => {
     dispatch({ type: "TAP_REPAIR" });
-    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(8);
-  }, []);
-
-  const tapAssemble = useCallback(() => {
-    dispatch({ type: "TAP_ASSEMBLE" });
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(8);
   }, []);
 
@@ -524,7 +524,8 @@ export function useGame() {
       skipIntro: () => dispatch({ type: "SKIP_INTRO" }),
       focus: (id: SystemId) => dispatch({ type: "FOCUS", id }),
       tap,
-      tapAssemble,
+      finishMinigame: (score: number) => dispatch({ type: "FINISH_MINIGAME", score }),
+      launchBuilt: () => dispatch({ type: "LAUNCH_BUILT" }),
       startLaunch: () => dispatch({ type: "START_LAUNCH" }),
       accept: (id: string) => dispatch({ type: "ACCEPT", id }),
       shoot,
@@ -546,7 +547,7 @@ export function useGame() {
       commitBuild: () => dispatch({ type: "COMMIT_BUILD" }),
       reset,
     }),
-    [reset, shoot, tap, tapAssemble],
+    [reset, shoot, tap],
   );
 
   return { ready: true, state, sim, simRef, actions };

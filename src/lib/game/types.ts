@@ -86,9 +86,13 @@ export interface Craft {
   lifeCut: number;
 }
 
+export type AssemblyStep = "gear" | "bolts" | "flash" | "verdict";
+export type BuildGrade = "good" | "mid" | "bad";
+
 export interface Assembly {
   craft: Craft;
-  progress: number;
+  step: AssemblyStep;
+  scores: number[];
 }
 
 export interface WorkshopDraft {
