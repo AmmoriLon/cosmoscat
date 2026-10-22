@@ -84,8 +84,8 @@ export function Launch({ t, craft }: { t: number; craft: Craft | null }) {
             <img
               src="/game/launch-rocket.png"
               alt="Камыш-2"
-              width={467}
-              height={1052}
+              width={557}
+              height={1251}
               className="relative z-10 h-auto w-full"
               draggable={false}
             />
