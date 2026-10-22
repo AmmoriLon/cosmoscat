@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GAME_TITLE } from "@/lib/game/data";
@@ -46,13 +46,18 @@ export function Game() {
           <h1 className="font-heading text-xl leading-none">{GAME_TITLE}</h1>
         </div>
         {state.phase !== "intro" ? (
-          <div className="text-right">
-            <p className="font-mono text-sm text-copper">{formatMoney(state.money)}</p>
-            <p className="text-[10px] text-zinc-500">
-              {state.phase === "ops"
-                ? `${formatBureauClock(state.timeSec)} · виток ${state.orbits}`
-                : "ангар / старт"}
-            </p>
+          <div className="flex items-center gap-2">
+            {state.phase === "ops" ? (
+              <AlarmMark crafts={state.crafts} onOpen={(id) => setInspectId(id)} />
+            ) : null}
+            <div className="text-right">
+              <p className="font-mono text-sm text-copper">{formatMoney(state.money)}</p>
+              <p className="text-[10px] text-zinc-500">
+                {state.phase === "ops"
+                  ? `${formatBureauClock(state.timeSec)} · виток ${state.orbits}`
+                  : "ангар / старт"}
+              </p>
+            </div>
           </div>
         ) : (
           <Button variant="ghost" size="sm" onClick={actions.skipIntro}>
@@ -76,9 +81,7 @@ export function Game() {
 
       {state.phase === "launch" ? <Launch t={state.launchT} craft={state.pendingCraft} /> : null}
 
-      {state.phase === "ops" ? (
-        <FailureStrip crafts={state.crafts} onOpen={(id) => setInspectId(id)} />
-      ) : null}
+      {state.phase === "ops" ? <FailureToasts crafts={state.crafts} /> : null}
 
       {state.phase === "ops" && state.assembly ? (
         <AssemblyGames state={state} onScore={actions.finishMinigame} onLaunch={actions.launchBuilt} />
@@ -201,31 +204,128 @@ export function Game() {
   );
 }
 
-function FailureStrip({ crafts, onOpen }: { crafts: Craft[]; onOpen: (id: string) => void }) {
-  const alarmed = crafts.filter((c) => c.events.length > 0 && c.status !== "reentry");
+function alarmedCrafts(crafts: Craft[]) {
+  return crafts.filter((c) => c.events.length > 0 && c.status !== "reentry");
+}
+
+function AlarmMark({ crafts, onOpen }: { crafts: Craft[]; onOpen: (id: string) => void }) {
+  const alarmed = alarmedCrafts(crafts);
   if (!alarmed.length) return null;
+  const latest = alarmed[alarmed.length - 1];
   return (
-    <div className="grid gap-2 px-3 pt-1">
-      {alarmed.slice(0, 3).map((craft) => {
-        const last = craft.events[craft.events.length - 1];
-        const dead = craft.status === "failed";
-        return (
-          <button
-            key={craft.id}
-            type="button"
-            onClick={() => onOpen(craft.id)}
-            className="flex items-center gap-3 rounded-2xl border border-red-400/70 bg-red-600/30 px-3 py-2.5 text-left shadow-[0_0_28px_rgba(220,38,38,0.28)]"
-          >
-            <AlertTriangle className="size-6 shrink-0 animate-pulse text-red-100" aria-hidden />
-            <span className="min-w-0">
-              <span className="block text-sm font-medium text-red-50">
-                «{craft.name}» {dead ? "вышел из строя" : "выходит из строя"}
-              </span>
-              <span className="block truncate text-xs text-red-100/85">{last?.title}</span>
-            </span>
-          </button>
-        );
-      })}
+    <button
+      type="button"
+      onClick={() => onOpen(latest.id)}
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-red-400/70 bg-red-600/35"
+      aria-label="Авария: аппарат выходит из строя"
+    >
+      <AlertTriangle className="size-5 animate-pulse text-red-100" />
+    </button>
+  );
+}
+
+type AlarmToast = { id: string; name: string; title: string; dead: boolean };
+
+function FailureToasts({ crafts }: { crafts: Craft[] }) {
+  const [toasts, setToasts] = useState<AlarmToast[]>([]);
+  const seen = useRef<Set<string>>(new Set());
+  const ready = useRef(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      ready.current = true;
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const items: AlarmToast[] = [];
+    for (const craft of crafts) {
+      if (craft.status === "reentry") continue;
+      for (const event of craft.events) {
+        items.push({
+          id: event.id,
+          name: craft.name,
+          title: event.title,
+          dead: craft.status === "failed",
+        });
+      }
+    }
+    if (!ready.current) {
+      seen.current = new Set(items.map((item) => item.id));
+      return;
+    }
+    const fresh = items.filter((item) => !seen.current.has(item.id));
+    if (!fresh.length) return;
+    fresh.forEach((item) => seen.current.add(item.id));
+    setToasts((prev) => [...prev, ...fresh].slice(-3));
+  }, [crafts]);
+
+  const dismiss = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  }, []);
+
+  if (!toasts.length) return null;
+  return (
+    <div className="pointer-events-none fixed inset-x-0 top-20 z-30 flex flex-col gap-2 px-3">
+      {toasts.map((toast) => (
+        <AlarmToastCard key={toast.id} toast={toast} onDismiss={dismiss} />
+      ))}
+    </div>
+  );
+}
+
+function AlarmToastCard({ toast, onDismiss }: { toast: AlarmToast; onDismiss: (id: string) => void }) {
+  const [dx, setDx] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef<{ x: number; dx: number } | null>(null);
+  const dismiss = useCallback(() => onDismiss(toast.id), [onDismiss, toast.id]);
+
+  useEffect(() => {
+    if (dragging) return;
+    const timer = window.setTimeout(dismiss, 4000);
+    return () => window.clearTimeout(timer);
+  }, [dismiss, dragging]);
+
+  return (
+    <div
+      className="pointer-events-auto flex touch-none items-center gap-3 rounded-2xl border border-red-400/70 bg-red-700/90 px-3 py-2.5 text-left shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+      style={{
+        transform: `translateX(${dx}px)`,
+        opacity: Math.max(0, 1 - Math.abs(dx) / 180),
+        transition: dragging ? "none" : "transform 180ms ease, opacity 180ms ease",
+      }}
+      onPointerDown={(e) => {
+        drag.current = { x: e.clientX, dx: 0 };
+        setDragging(true);
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        if (!drag.current) return;
+        const next = e.clientX - drag.current.x;
+        drag.current.dx = next;
+        setDx(next);
+      }}
+      onPointerUp={() => {
+        const moved = drag.current?.dx ?? 0;
+        drag.current = null;
+        setDragging(false);
+        if (Math.abs(moved) > 72) dismiss();
+        else setDx(0);
+      }}
+      onPointerCancel={() => {
+        drag.current = null;
+        setDragging(false);
+        setDx(0);
+      }}
+    >
+      <AlertTriangle className="size-5 shrink-0 text-red-100" aria-hidden />
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-red-50">
+          «{toast.name}» {toast.dead ? "вышел из строя" : "выходит из строя"}
+        </span>
+        <span className="block truncate text-xs text-red-100/85">{toast.title}</span>
+      </span>
     </div>
   );
 }
