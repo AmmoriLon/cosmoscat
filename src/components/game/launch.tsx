@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { ORBITS } from "@/lib/game/data";
 import type { Craft } from "@/lib/game/types";
 
@@ -15,10 +16,26 @@ const BEATS = [
 ];
 
 export function Launch({ t, craft }: { t: number; craft: Craft | null }) {
-  const beat = [...BEATS].reverse().find((b) => t >= b.t) ?? BEATS[0];
-  const ignite = t >= 1.6;
-  const lift = Math.min(1, Math.max(0, (t - 3.0) / 10.2));
-  const sky = Math.min(1, Math.max(0, (t - 2.4) / 8));
+  const [clock, setClock] = useState(t);
+  const clockRef = useRef(t);
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    const loop = (now: number) => {
+      const dt = Math.min(0.032, (now - last) / 1000);
+      last = now;
+      clockRef.current += dt;
+      setClock(clockRef.current);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const beat = [...BEATS].reverse().find((b) => clock >= b.t) ?? BEATS[0];
+  const ignite = clock >= 1.6;
+  const lift = Math.min(1, Math.max(0, (clock - 3.0) / 10.2));
+  const sky = Math.min(1, Math.max(0, (clock - 2.4) / 8));
   const name = craft?.name ?? "Лапка-1";
   const orbit = craft ? ORBITS[craft.orbit].name : "ССО 535 км";
 
@@ -47,7 +64,7 @@ export function Launch({ t, craft }: { t: number; craft: Craft | null }) {
         <h2 className="font-heading mt-1 text-2xl">{beat.title}</h2>
         <p className="mt-2 text-sm leading-relaxed text-zinc-300">{beat.detail}</p>
         <p className="mt-2 text-xs text-zinc-500">Цель: {orbit}</p>
-        <p className="mt-1 font-mono text-xs text-copper">T+{t.toFixed(1)} с</p>
+        <p className="mt-1 font-mono text-xs text-copper">T+{clock.toFixed(1)} с</p>
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-10 overflow-visible">
