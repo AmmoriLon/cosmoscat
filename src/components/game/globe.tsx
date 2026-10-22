@@ -4,9 +4,21 @@ import { Suspense, useMemo, useRef } from "react";
 import { Canvas, useFrame, useLoader } from "@react-three/fiber";
 import { OrbitControls, Stars } from "@react-three/drei";
 import * as THREE from "three";
-import { EARTH_R, PPIS } from "@/lib/game/data";
-import { latLonToXyz, orbitPoints, rotateY, satEci, satRadius } from "@/lib/game/orbit";
-import type { Contract, OrbitId, SimRef } from "@/lib/game/types";
+import { EARTH_R, ORBITS, PPIS } from "@/lib/game/data";
+import { craftAnomaly, latLonToXyz, rotateY, satEci, satRadius } from "@/lib/game/orbit";
+import type { Contract, Craft, HullId, OrbitId, SimRef } from "@/lib/game/types";
+
+class KeplerCurve extends THREE.Curve<THREE.Vector3> {
+  orbitId: OrbitId;
+  constructor(orbitId: OrbitId) {
+    super();
+    this.orbitId = orbitId;
+  }
+  getPoint(t: number, target = new THREE.Vector3()) {
+    const p = satEci(t * Math.PI * 2, this.orbitId);
+    return target.set(p.x, p.y, p.z);
+  }
+}
 
 function Earth({ simRef }: { simRef: SimRef }) {
   const group = useRef<THREE.Group>(null);
@@ -29,33 +41,173 @@ function Earth({ simRef }: { simRef: SimRef }) {
 }
 
 function OrbitRing({ orbitId }: { orbitId: OrbitId }) {
-  const curve = useMemo(() => {
-    const pts = orbitPoints(orbitId).map((p) => new THREE.Vector3(p.x, p.y, p.z));
-    return new THREE.CatmullRomCurve3(pts, true);
-  }, [orbitId]);
+  const curve = useMemo(() => new KeplerCurve(orbitId), [orbitId]);
   return (
     <mesh>
-      <tubeGeometry args={[curve, 128, 0.012, 8, true]} />
-      <meshBasicMaterial color="#e8a25a" toneMapped={false} />
+      <tubeGeometry args={[curve, 192, 0.01, 8, true]} />
+      <meshBasicMaterial color={ORBITS[orbitId].ring} transparent opacity={0.85} toneMapped={false} />
     </mesh>
   );
 }
 
-function Satellite({ simRef, flash, orbitId }: { simRef: SimRef; flash: number; orbitId: OrbitId }) {
-  const ref = useRef<THREE.Group>(null);
-  const mat = useRef<THREE.MeshStandardMaterial>(null);
-  useFrame(() => {
-    if (!ref.current) return;
-    const p = satEci(simRef.current.anomaly, orbitId);
-    ref.current.position.set(p.x, p.y, p.z);
-    ref.current.lookAt(0, 0, 0);
-    if (mat.current) mat.current.emissiveIntensity = flash > 0 && performance.now() - flash < 500 ? 2 : 0.2;
-  });
+function hullTint(id: string) {
+  const n = id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+  const hues = ["#e8edf2", "#d7e3f2", "#f0e6d4", "#e3f0e6", "#efe4f0", "#f2ece0"];
+  return hues[n % hues.length];
+}
+
+function CraftMesh({ hull, tint }: { hull: HullId; tint: string }) {
+  const body = tint;
+  if (hull === "irbus") {
+    return (
+      <group>
+        <mesh>
+          <boxGeometry args={[0.055, 0.055, 0.2]} />
+          <meshStandardMaterial color="#c9a227" metalness={0.4} roughness={0.35} />
+        </mesh>
+        <mesh position={[0, 0, 0.13]}>
+          <cylinderGeometry args={[0.018, 0.022, 0.05, 10]} />
+          <meshStandardMaterial color="#2a2a2a" />
+        </mesh>
+        <mesh position={[0.13, 0, 0]}>
+          <boxGeometry args={[0.18, 0.004, 0.06]} />
+          <meshStandardMaterial color="#3a1a0a" emissive="#8a4a12" emissiveIntensity={0.35} />
+        </mesh>
+        <mesh position={[-0.13, 0, 0]}>
+          <boxGeometry args={[0.18, 0.004, 0.06]} />
+          <meshStandardMaterial color="#3a1a0a" emissive="#8a4a12" emissiveIntensity={0.35} />
+        </mesh>
+      </group>
+    );
+  }
+  if (hull === "msbus") {
+    return (
+      <group>
+        <mesh>
+          <boxGeometry args={[0.07, 0.07, 0.16]} />
+          <meshStandardMaterial color="#b7d4a8" metalness={0.2} roughness={0.4} />
+        </mesh>
+        <mesh position={[0.03, 0.02, 0.1]}>
+          <cylinderGeometry args={[0.012, 0.014, 0.03, 8]} />
+          <meshStandardMaterial color="#1c2a18" />
+        </mesh>
+        <mesh position={[-0.02, -0.01, 0.1]}>
+          <cylinderGeometry args={[0.01, 0.012, 0.028, 8]} />
+          <meshStandardMaterial color="#243018" />
+        </mesh>
+        <mesh position={[0.14, 0, 0]}>
+          <boxGeometry args={[0.2, 0.004, 0.08]} />
+          <meshStandardMaterial color="#1b4a32" emissive="#2f8a55" emissiveIntensity={0.4} />
+        </mesh>
+        <mesh position={[-0.14, 0, 0]}>
+          <boxGeometry args={[0.2, 0.004, 0.08]} />
+          <meshStandardMaterial color="#1b4a32" emissive="#2f8a55" emissiveIntensity={0.4} />
+        </mesh>
+      </group>
+    );
+  }
+  if (hull === "combo") {
+    return (
+      <group>
+        <mesh>
+          <boxGeometry args={[0.08, 0.08, 0.18]} />
+          <meshStandardMaterial color={body} metalness={0.25} roughness={0.35} />
+        </mesh>
+        <mesh position={[0.025, 0.01, 0.12]}>
+          <cylinderGeometry args={[0.014, 0.016, 0.04, 10]} />
+          <meshStandardMaterial color="#222" />
+        </mesh>
+        <mesh position={[-0.025, -0.01, 0.12]}>
+          <cylinderGeometry args={[0.012, 0.014, 0.036, 10]} />
+          <meshStandardMaterial color="#c9a227" />
+        </mesh>
+        {[0.16, -0.16].map((x) => (
+          <mesh key={x} position={[x, 0, 0]}>
+            <boxGeometry args={[0.18, 0.004, 0.07]} />
+            <meshStandardMaterial color="#1b3a6b" emissive="#3a7ad9" emissiveIntensity={0.45} />
+          </mesh>
+        ))}
+        {[0.16, -0.16].map((y) => (
+          <mesh key={`y${y}`} position={[0, y, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <boxGeometry args={[0.14, 0.004, 0.05]} />
+            <meshStandardMaterial color="#1b3a6b" emissive="#3a7ad9" emissiveIntensity={0.35} />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+  if (hull === "polar") {
+    return (
+      <group>
+        <mesh>
+          <cylinderGeometry args={[0.045, 0.045, 0.16, 6]} />
+          <meshStandardMaterial color="#dce6f2" metalness={0.3} roughness={0.3} />
+        </mesh>
+        {[0, 1, 2, 3].map((i) => {
+          const a = (i * Math.PI) / 2 + Math.PI / 4;
+          return (
+            <mesh key={i} position={[Math.cos(a) * 0.14, Math.sin(a) * 0.14, 0]} rotation={[0, 0, a]}>
+              <boxGeometry args={[0.2, 0.003, 0.055]} />
+              <meshStandardMaterial color="#16324f" emissive="#4aa0e0" emissiveIntensity={0.5} />
+            </mesh>
+          );
+        })}
+        <mesh position={[0, 0, 0.1]}>
+          <cylinderGeometry args={[0.016, 0.02, 0.04, 12]} />
+          <meshStandardMaterial color="#111" />
+        </mesh>
+      </group>
+    );
+  }
+  if (hull === "molniya") {
+    return (
+      <group>
+        <mesh>
+          <boxGeometry args={[0.09, 0.07, 0.14]} />
+          <meshStandardMaterial color="#f0d8b0" metalness={0.35} roughness={0.4} />
+        </mesh>
+        <mesh position={[0.12, 0.04, 0]} rotation={[0.4, 0.3, 0]}>
+          <sphereGeometry args={[0.045, 12, 8, 0, Math.PI]} />
+          <meshStandardMaterial color="#cfd6de" side={THREE.DoubleSide} metalness={0.6} roughness={0.2} />
+        </mesh>
+        <mesh position={[-0.14, 0, 0]}>
+          <boxGeometry args={[0.16, 0.004, 0.07]} />
+          <meshStandardMaterial color="#5a2a08" emissive="#c46a18" emissiveIntensity={0.4} />
+        </mesh>
+        <mesh position={[0, -0.08, 0]}>
+          <cylinderGeometry args={[0.006, 0.006, 0.1, 6]} />
+          <meshStandardMaterial color="#888" />
+        </mesh>
+      </group>
+    );
+  }
+  if (hull === "bus") {
+    return (
+      <group>
+        <mesh>
+          <cylinderGeometry args={[0.055, 0.055, 0.14, 8]} />
+          <meshStandardMaterial color={body} metalness={0.28} roughness={0.32} />
+        </mesh>
+        <mesh position={[0.16, 0, 0]}>
+          <boxGeometry args={[0.22, 0.005, 0.09]} />
+          <meshStandardMaterial color="#1b3a6b" emissive="#3a7ad9" emissiveIntensity={0.5} />
+        </mesh>
+        <mesh position={[-0.16, 0, 0]}>
+          <boxGeometry args={[0.22, 0.005, 0.09]} />
+          <meshStandardMaterial color="#1b3a6b" emissive="#3a7ad9" emissiveIntensity={0.5} />
+        </mesh>
+        <mesh position={[0, 0, 0.09]}>
+          <boxGeometry args={[0.04, 0.04, 0.03]} />
+          <meshStandardMaterial color="#222" />
+        </mesh>
+      </group>
+    );
+  }
   return (
-    <group ref={ref}>
+    <group>
       <mesh>
         <boxGeometry args={[0.07, 0.07, 0.14]} />
-        <meshStandardMaterial ref={mat} color="#e8edf2" emissive="#fff6d2" emissiveIntensity={0.2} />
+        <meshStandardMaterial color={body} emissive="#fff6d2" emissiveIntensity={0.15} />
       </mesh>
       <mesh position={[0.12, 0, 0]}>
         <boxGeometry args={[0.16, 0.004, 0.07]} />
@@ -64,6 +216,46 @@ function Satellite({ simRef, flash, orbitId }: { simRef: SimRef; flash: number; 
       <mesh position={[-0.12, 0, 0]}>
         <boxGeometry args={[0.16, 0.004, 0.07]} />
         <meshStandardMaterial color="#1b3a6b" emissive="#3a7ad9" emissiveIntensity={0.5} />
+      </mesh>
+    </group>
+  );
+}
+
+function Satellite({
+  craft,
+  simRef,
+  flash,
+  selected,
+  onInspect,
+}: {
+  craft: Craft;
+  simRef: SimRef;
+  flash: number;
+  selected: boolean;
+  onInspect: (id: string) => void;
+}) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(() => {
+    if (!ref.current) return;
+    const a = craftAnomaly(craft, simRef.current.clock);
+    const p = satEci(a, craft.orbit);
+    ref.current.position.set(p.x, p.y, p.z);
+    ref.current.lookAt(0, 0, 0);
+    const pulse = selected && flash > 0 && performance.now() - flash < 500 ? 1.35 : selected ? 1.12 : 1;
+    ref.current.scale.setScalar(pulse);
+  });
+  return (
+    <group
+      ref={ref}
+      onClick={(e) => {
+        e.stopPropagation();
+        onInspect(craft.id);
+      }}
+    >
+      <CraftMesh hull={craft.hull} tint={hullTint(craft.id)} />
+      <mesh>
+        <sphereGeometry args={[0.085, 10, 10]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
     </group>
   );
@@ -101,14 +293,15 @@ function Marker({
   );
 }
 
-function Beam({ simRef, orbitId }: { simRef: SimRef; orbitId: OrbitId }) {
+function Beam({ craft, simRef }: { craft: Craft; simRef: SimRef }) {
   const ref = useRef<THREE.Mesh>(null);
   useFrame(() => {
     if (!ref.current) return;
-    const p = satEci(simRef.current.anomaly, orbitId);
+    const a = craftAnomaly(craft, simRef.current.clock);
+    const p = satEci(a, craft.orbit);
     ref.current.position.set(p.x / 2, p.y / 2, p.z / 2);
     ref.current.lookAt(p.x, p.y, p.z);
-    ref.current.scale.set(1, 1, (satRadius(simRef.current.anomaly, orbitId) - EARTH_R) / 2);
+    ref.current.scale.set(1, 1, (satRadius(a, craft.orbit) - EARTH_R) / 2);
   });
   return (
     <mesh ref={ref}>
@@ -121,20 +314,28 @@ function Beam({ simRef, orbitId }: { simRef: SimRef; orbitId: OrbitId }) {
 export function Globe({
   simRef,
   contracts,
+  crafts,
+  activeCraftId,
   flash,
   jobActive,
-  orbitId = "sso535",
+  onInspect,
 }: {
   simRef: SimRef;
   contracts: Contract[];
+  crafts: Craft[];
+  activeCraftId: string | null;
   flash: number;
   jobActive: boolean;
-  orbitId?: OrbitId;
+  onInspect: (id: string) => void;
 }) {
+  const alive = crafts.filter((c) => c.status === "alive");
+  const orbits = [...new Set(alive.map((c) => c.orbit))];
+  const active = alive.find((c) => c.id === activeCraftId) ?? null;
+
   return (
     <div className="relative h-[46vh] min-h-[280px] w-full overflow-hidden bg-[#070b14] sm:h-[52vh] lg:h-auto lg:min-h-[520px] lg:flex-1">
       <Canvas
-        camera={{ position: [0, 0.45, 5.3], fov: 38 }}
+        camera={{ position: [0, 0.45, 5.8], fov: 38 }}
         dpr={[1, 1.5]}
         gl={{ antialias: true, alpha: false, toneMapping: THREE.NoToneMapping }}
       >
@@ -145,9 +346,20 @@ export function Globe({
         <Suspense fallback={null}>
           <Earth simRef={simRef} />
         </Suspense>
-        <OrbitRing key={orbitId} orbitId={orbitId} />
-        <Satellite simRef={simRef} flash={flash} orbitId={orbitId} />
-        {jobActive ? <Beam simRef={simRef} orbitId={orbitId} /> : null}
+        {orbits.map((id) => (
+          <OrbitRing key={id} orbitId={id} />
+        ))}
+        {alive.map((craft) => (
+          <Satellite
+            key={craft.id}
+            craft={craft}
+            simRef={simRef}
+            flash={flash}
+            selected={craft.id === activeCraftId}
+            onInspect={onInspect}
+          />
+        ))}
+        {jobActive && active ? <Beam craft={active} simRef={simRef} /> : null}
         {PPIS.map((p) => (
           <Marker key={p.id} lat={p.lat} lon={p.lon} color="#7ec8c5" simRef={simRef} />
         ))}
@@ -167,14 +379,14 @@ export function Globe({
           enablePan={false}
           enableRotate
           enableZoom
-          minDistance={4.6}
-          maxDistance={7}
+          minDistance={4.8}
+          maxDistance={8.2}
           enableDamping
           dampingFactor={0.08}
         />
       </Canvas>
       <p className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-black/45 px-3 py-1 font-mono text-[10px] text-zinc-300">
-        крути пальцем · орбита · ППИ · цель
+        тап по КА · телеметрия · {alive.length} на орбите
       </p>
     </div>
   );

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { GAME_TITLE } from "@/lib/game/data";
-import { activeCraft, formatBureauClock, formatMoney } from "@/lib/game/save";
+import { formatBureauClock, formatMoney } from "@/lib/game/save";
 import { useGame } from "@/lib/game/use-game";
 import { BureauSheet } from "./bureau-sheet";
 import { FleetPanel } from "./fleet";
@@ -13,6 +13,7 @@ import { Intro } from "./intro";
 import { Launch } from "./launch";
 import { OpsPanel } from "./ops";
 import { PhotoDialog } from "./photo-dialog";
+import { TelemetrySheet } from "./telemetry-sheet";
 
 export function Game() {
   const { state, sim, simRef, actions } = useGame();
@@ -20,6 +21,7 @@ export function Game() {
   const [photoOpen, setPhotoOpen] = useState(false);
   const [photoId, setPhotoId] = useState<string | null>(null);
   const [flash, setFlash] = useState(0);
+  const [inspectId, setInspectId] = useState<string | null>(null);
 
   const openJob = useMemo(() => {
     if (photoId) return state.jobs.find((j) => j.id === photoId) ?? null;
@@ -31,7 +33,7 @@ export function Game() {
     [state.contracts, openJob],
   );
 
-  const craft = activeCraft(state);
+  const inspectCraft = state.crafts.find((c) => c.id === inspectId) ?? null;
 
   return (
     <div className="game-root">
@@ -77,9 +79,11 @@ export function Game() {
             <Globe
               simRef={simRef}
               contracts={state.contracts}
+              crafts={state.crafts}
+              activeCraftId={state.activeCraftId}
               flash={flash}
               jobActive={state.jobs.some((j) => j.stage === "onboard" || j.stage === "downlink")}
-              orbitId={craft?.orbit ?? "sso535"}
+              onInspect={(id) => setInspectId(id)}
             />
           ) : null}
           <div className="min-h-0 flex-1 lg:w-[440px] lg:overflow-y-auto lg:border-l lg:border-white/10">
@@ -103,6 +107,7 @@ export function Game() {
             ) : (
               <FleetPanel
                 state={state}
+                onInspect={(id) => setInspectId(id)}
                 onSelect={actions.selectCraft}
                 onOpenWorkshop={actions.openWorkshop}
                 onCloseWorkshop={actions.closeWorkshop}
@@ -111,6 +116,7 @@ export function Game() {
                 onMemory={actions.setMemory}
                 onToggleCamera={actions.toggleCamera}
                 onCommit={actions.commitBuild}
+                onTapAssemble={actions.tapAssemble}
               />
             )}
           </div>
@@ -132,7 +138,7 @@ export function Game() {
               className="h-11"
               onClick={() => actions.setTab("fleet")}
             >
-              Аппараты
+              {state.assembly ? `Сборка ${Math.floor(state.assembly.progress)}%` : "Аппараты"}
             </Button>
           </div>
         </nav>
@@ -154,6 +160,16 @@ export function Game() {
         }}
       />
 
+      <TelemetrySheet
+        open={!!inspectCraft}
+        craft={inspectCraft}
+        state={state}
+        onOpenChange={(open) => {
+          if (!open) setInspectId(null);
+        }}
+        onSelect={actions.selectCraft}
+      />
+
       <BureauSheet
         open={bureau}
         onOpenChange={setBureau}
@@ -165,6 +181,7 @@ export function Game() {
           setBureau(false);
           setPhotoId(null);
           setPhotoOpen(false);
+          setInspectId(null);
         }}
       />
     </div>

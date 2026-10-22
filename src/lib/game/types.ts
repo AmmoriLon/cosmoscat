@@ -18,7 +18,8 @@ export type Biome =
 export type CameraId = "opt" | "ir" | "ms";
 export type OrbitId = "sso535" | "eq400" | "polar800" | "ellip";
 export type MemoryId = "bzu1" | "bzu4" | "bzu16";
-export type CraftStatus = "alive" | "reentry";
+export type HullId = "cubesat" | "irbus" | "msbus" | "combo" | "polar" | "molniya" | "bus";
+export type CraftStatus = "alive" | "reentry" | "failed";
 export type OpsTab = "contracts" | "fleet";
 
 export type JobStage = "onboard" | "downlink" | "processing" | "ready";
@@ -63,14 +64,31 @@ export interface PhotoJob {
   capturedAt: number;
 }
 
+export interface CraftEvent {
+  id: string;
+  at: number;
+  kind: string;
+  title: string;
+  detail: string;
+}
+
 export interface Craft {
   id: string;
   name: string;
   orbit: OrbitId;
   cameras: CameraId[];
   memory: MemoryId;
+  hull: HullId;
+  phase: number;
   launchedAt: number;
   status: CraftStatus;
+  events: CraftEvent[];
+  lifeCut: number;
+}
+
+export interface Assembly {
+  craft: Craft;
+  progress: number;
 }
 
 export interface WorkshopDraft {
@@ -87,7 +105,7 @@ export interface LogEntry {
 }
 
 export interface GameState {
-  version: 2;
+  version: 3;
   phase: Phase;
   introStep: number;
   money: number;
@@ -105,6 +123,7 @@ export interface GameState {
   crafts: Craft[];
   activeCraftId: string | null;
   workshop: WorkshopDraft | null;
+  assembly: Assembly | null;
   pendingCraft: Craft | null;
   log: LogEntry[];
   launchT: number;
@@ -112,6 +131,7 @@ export interface GameState {
 }
 
 export interface SimSnapshot {
+  clock: number;
   anomaly: number;
   earthAngle: number;
   satLat: number;

@@ -2,19 +2,25 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
-  EARTH_DAY_S,
+  ENGINEER_ASSEMBLE_PER_S,
   ENGINEER_REPAIR_PER_S,
+  FAILURES,
   LAUNCH_END_S,
   ORBITS,
   PPIS,
+  TAP_ASSEMBLE,
   TAP_REPAIR,
   UPGRADES,
   buildCost,
+  craftLifeSec,
   emptyWorkshop,
+  hullFromSpec,
 } from "./data";
 import {
   approachIds,
+  craftAnomaly,
   eciToLatLon,
+  earthAngleAt,
   imagingIds,
   orbitCanSee,
   ppiInView,
@@ -63,16 +69,22 @@ type Action =
   | { type: "CLOSE_WORKSHOP" }
   | { type: "EDIT_WORKSHOP"; draft: Partial<WorkshopDraft> }
   | { type: "COMMIT_BUILD" }
+  | { type: "TAP_ASSEMBLE" }
+  | { type: "ASSEMBLE_TICK"; dt: number }
   | { type: "RESET" };
 
 function applyReentries(state: GameState): GameState {
   let next = state;
   const crafts = state.crafts.map((c) => {
-    if (c.status === "alive" && craftLeft(c, state.timeSec) <= 0) {
-      next = addLog(next, `«${c.name}» вошёл в атмосферу и сгорел. Срок вышел.`);
-      return { ...c, status: "reentry" as const };
+    if (c.status !== "alive") return c;
+    if (craftLeft(c, state.timeSec) > 0) return c;
+    const last = c.events[c.events.length - 1];
+    if (last) {
+      next = addLog(next, `«${c.name}» потерян: ${last.title}. Аппарат вышел из строя раньше срока.`);
+      return { ...c, status: "failed" as const };
     }
-    return c;
+    next = addLog(next, `«${c.name}» вошёл в атмосферу и сгорел. Срок вышел.`);
+    return { ...c, status: "reentry" as const };
   });
   if (crafts.every((c, i) => c === state.crafts[i])) return state;
   const alive = crafts.filter((c) => c.status === "alive");
@@ -83,10 +95,56 @@ function applyReentries(state: GameState): GameState {
     activeCraftId: activeStill?.id ?? alive[0]?.id ?? null,
     jobs: next.jobs.filter((j) => {
       const host = crafts.find((c) => c.id === j.craftId);
-      if (host?.status === "reentry" && j.stage !== "ready") return false;
+      if (host && host.status !== "alive" && j.stage !== "ready") return false;
       return true;
     }),
   };
+}
+
+function rollFailures(state: GameState, dt: number): GameState {
+  let next = state;
+  let changed = false;
+  const crafts = state.crafts.map((c) => {
+    if (c.status !== "alive") return c;
+    const age = state.timeSec - c.launchedAt;
+    if (age < 10) return c;
+    if (c.events.length >= 4) return c;
+    const chance = 0.0042 * (dt / 0.1);
+    if (Math.random() > chance) return c;
+    const used = new Set(c.events.map((e) => e.kind));
+    const pool = FAILURES.filter((f) => !used.has(f.kind));
+    if (!pool.length) return c;
+    const kind = pool[Math.floor(Math.random() * pool.length)];
+    const cut = craftLifeSec(c.orbit) * kind.lifeFrac;
+    const event = {
+      id: uid("ev"),
+      at: state.timeSec,
+      kind: kind.kind,
+      title: kind.title,
+      detail: kind.detail,
+    };
+    changed = true;
+    next = addLog(next, `«${c.name}»: ${kind.title}. Срок жизни сократился.`);
+    return { ...c, events: [...c.events, event], lifeCut: c.lifeCut + cut };
+  });
+  if (!changed) return state;
+  return applyReentries({ ...next, crafts });
+}
+
+function launchFromAssembly(state: GameState): GameState {
+  if (!state.assembly) return state;
+  const craft = state.assembly.craft;
+  return addLog(
+    {
+      ...state,
+      assembly: null,
+      pendingCraft: craft,
+      phase: "launch",
+      launchT: 0,
+      tab: "contracts",
+    },
+    `«${craft.name}» собран. Вывоз на старт.`,
+  );
 }
 
 function reducer(state: GameState, action: Action): GameState {
@@ -134,7 +192,8 @@ function reducer(state: GameState, action: Action): GameState {
       if (t >= LAUNCH_END_S) {
         const craft = state.pendingCraft ?? makeLapka(state.timeSec);
         const already = state.crafts.some((c) => c.id === craft.id);
-        const crafts = already ? state.crafts : [...state.crafts, { ...craft, launchedAt: state.timeSec, status: "alive" as const }];
+        const ready = { ...craft, launchedAt: state.timeSec, status: "alive" as const };
+        const crafts = already ? state.crafts.map((c) => (c.id === ready.id ? ready : c)) : [...state.crafts, ready];
         return addLog(
           {
             ...state,
@@ -275,13 +334,14 @@ function reducer(state: GameState, action: Action): GameState {
       return { ...state, orbits: state.orbits + 1 };
     case "TIME": {
       if (state.phase !== "ops") return state;
-      return applyReentries({ ...state, timeSec: state.timeSec + action.dt });
+      return rollFailures(applyReentries({ ...state, timeSec: state.timeSec + action.dt }), action.dt);
     }
     case "SET_TAB":
       return { ...state, tab: action.tab };
     case "SELECT_CRAFT":
       return { ...state, activeCraftId: action.id, tab: "contracts" };
     case "OPEN_WORKSHOP":
+      if (state.assembly) return addLog(state, "Сначала дособери текущий аппарат.");
       return { ...state, tab: "fleet", workshop: emptyWorkshop(nextCraftName(state.crafts)) };
     case "CLOSE_WORKSHOP":
       return { ...state, workshop: null };
@@ -294,7 +354,7 @@ function reducer(state: GameState, action: Action): GameState {
       return { ...state, workshop: draft };
     }
     case "COMMIT_BUILD": {
-      if (!state.workshop) return state;
+      if (!state.workshop || state.assembly) return state;
       const draft = state.workshop;
       const name = draft.name.trim().slice(0, 22);
       if (name.length < 2) return addLog(state, "Дай аппарату имя — хотя бы два знака.");
@@ -307,20 +367,37 @@ function reducer(state: GameState, action: Action): GameState {
         orbit: draft.orbit,
         cameras: draft.cameras,
         memory: draft.memory,
+        hull: hullFromSpec(draft.orbit, draft.cameras, draft.memory),
+        phase: Math.random() * Math.PI * 2,
         launchedAt: state.timeSec,
         status: "alive",
+        events: [],
+        lifeCut: 0,
       };
       return addLog(
         {
           ...state,
           money: state.money - cost,
           workshop: null,
-          pendingCraft: craft,
-          phase: "launch",
-          launchT: 0,
+          assembly: { craft, progress: 4 },
+          tab: "fleet",
         },
-        `Сборка «${name}» закрыта. ${formatBuildLine(draft)} Вывоз на старт.`,
+        `Закладка «${name}». ${formatBuildLine(draft)} Инженеры паяют, можно помочь.`,
       );
+    }
+    case "TAP_ASSEMBLE": {
+      if (!state.assembly || state.phase !== "ops") return state;
+      const progress = Math.min(100, state.assembly.progress + TAP_ASSEMBLE);
+      const next = { ...state, assembly: { ...state.assembly, progress } };
+      if (progress >= 100) return launchFromAssembly(next);
+      return next;
+    }
+    case "ASSEMBLE_TICK": {
+      if (!state.assembly || state.phase !== "ops") return state;
+      const progress = Math.min(100, state.assembly.progress + ENGINEER_ASSEMBLE_PER_S * action.dt);
+      const next = { ...state, assembly: { ...state.assembly, progress } };
+      if (progress >= 100) return launchFromAssembly(next);
+      return next;
     }
     case "RESET":
       return freshState();
@@ -334,6 +411,7 @@ function formatBuildLine(draft: WorkshopDraft) {
 }
 
 const EMPTY_SIM: SimSnapshot = {
+  clock: 0,
   anomaly: 0.4,
   earthAngle: 0.2,
   satLat: 0,
@@ -358,7 +436,9 @@ export function useGame() {
   useEffect(() => {
     boots.current += 1;
     if (boots.current === 1) {
-      dispatch({ type: "HYDRATE", state: loadState() });
+      const loaded = loadState();
+      simRef.current.clock = loaded.timeSec;
+      dispatch({ type: "HYDRATE", state: loaded });
       return;
     }
     persistState(state);
@@ -373,20 +453,26 @@ export function useGame() {
       last = now;
       const s = stateRef.current;
       if (s.phase === "ops") {
-        const craft = activeCraft(s);
-        const orbitId = craft?.orbit ?? "sso535";
-        const period = ORBITS[orbitId].period;
         const snap = simRef.current;
-        snap.anomaly = (snap.anomaly + (dt * Math.PI * 2) / period) % (Math.PI * 2);
-        snap.earthAngle = (snap.earthAngle + (dt * Math.PI * 2) / EARTH_DAY_S) % (Math.PI * 2);
-        const p = satEci(snap.anomaly, orbitId);
-        const ll = eciToLatLon(p.x, p.y, p.z, snap.earthAngle);
-        snap.satLat = ll.lat;
-        snap.satLon = ll.lon;
-        const active = s.contracts.filter((c) => c.status === "active");
-        snap.inImaging = imagingIds(ll.lat, ll.lon, active, orbitId);
-        snap.approaching = approachIds(ll.lat, ll.lon, active, orbitId);
-        snap.inPpi = ppiInView(ll.lat, ll.lon, PPIS);
+        snap.clock += dt;
+        snap.earthAngle = earthAngleAt(snap.clock);
+        const craft = activeCraft(s);
+        if (craft && craft.status === "alive") {
+          const orbitId = craft.orbit;
+          snap.anomaly = craftAnomaly(craft, snap.clock);
+          const p = satEci(snap.anomaly, orbitId);
+          const ll = eciToLatLon(p.x, p.y, p.z, snap.earthAngle);
+          snap.satLat = ll.lat;
+          snap.satLon = ll.lon;
+          const active = s.contracts.filter((c) => c.status === "active");
+          snap.inImaging = imagingIds(ll.lat, ll.lon, active, orbitId);
+          snap.approaching = approachIds(ll.lat, ll.lon, active, orbitId);
+          snap.inPpi = ppiInView(ll.lat, ll.lon, PPIS);
+        } else {
+          snap.inImaging = [];
+          snap.approaching = [];
+          snap.inPpi = [];
+        }
       }
       acc += dt;
       if (acc >= 0.1) {
@@ -399,6 +485,7 @@ export function useGame() {
           if (snap.anomaly < prevAnomaly.current) dispatch({ type: "ORBIT" });
           prevAnomaly.current = snap.anomaly;
           dispatch({ type: "TIME", dt: step });
+          if (s.assembly) dispatch({ type: "ASSEMBLE_TICK", dt: step });
           if (s.jobs.length) dispatch({ type: "JOB_TICK", dt: step, ppiIds: snap.inPpi });
           setSim({ ...snap });
         }
@@ -406,11 +493,16 @@ export function useGame() {
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => cancelAnimationFrame(loop);
   }, []);
 
   const tap = useCallback(() => {
     dispatch({ type: "TAP_REPAIR" });
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(8);
+  }, []);
+
+  const tapAssemble = useCallback(() => {
+    dispatch({ type: "TAP_ASSEMBLE" });
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(8);
   }, []);
 
@@ -432,6 +524,7 @@ export function useGame() {
       skipIntro: () => dispatch({ type: "SKIP_INTRO" }),
       focus: (id: SystemId) => dispatch({ type: "FOCUS", id }),
       tap,
+      tapAssemble,
       startLaunch: () => dispatch({ type: "START_LAUNCH" }),
       accept: (id: string) => dispatch({ type: "ACCEPT", id }),
       shoot,
@@ -453,7 +546,7 @@ export function useGame() {
       commitBuild: () => dispatch({ type: "COMMIT_BUILD" }),
       reset,
     }),
-    [reset, shoot, tap],
+    [reset, shoot, tap, tapAssemble],
   );
 
   return { ready: true, state, sim, simRef, actions };

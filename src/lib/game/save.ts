@@ -1,4 +1,14 @@
-import { CAMERAS, CONTRACTS, DAY_SEC, MEMORIES, ORBITS, SAVE_KEY, craftLifeSec } from "./data";
+import {
+  CAMERAS,
+  CONTRACTS,
+  DAY_SEC,
+  HULLS,
+  MEMORIES,
+  ORBITS,
+  SAVE_KEY,
+  craftLifeSec,
+  hullFromSpec,
+} from "./data";
 import type { Contract, Craft, GameState, PhotoJob, SystemId } from "./types";
 
 export function uid(prefix: string) {
@@ -18,16 +28,41 @@ export function pickContracts(used: string[], count: number): Contract[] {
   }));
 }
 
-export function makeLapka(launchedAt = 0): Craft {
+export function normalizeCraft(raw: Partial<Craft>, launchedAt = 0): Craft {
+  const orbit = raw.orbit && ORBITS[raw.orbit] ? raw.orbit : "sso535";
+  const cameras = Array.isArray(raw.cameras) && raw.cameras.length ? raw.cameras : ["opt"];
+  const memory = raw.memory && MEMORIES[raw.memory] ? raw.memory : "bzu1";
   return {
-    id: "craft-lapka",
-    name: "Лапка-1",
-    orbit: "sso535",
-    cameras: ["opt"],
-    memory: "bzu1",
-    launchedAt,
-    status: "alive",
+    id: raw.id ?? uid("craft"),
+    name: raw.name?.trim() || "Лапка-1",
+    orbit,
+    cameras,
+    memory,
+    hull: raw.hull ?? hullFromSpec(orbit, cameras, memory),
+    phase: typeof raw.phase === "number" ? raw.phase : 0.4,
+    launchedAt: raw.launchedAt ?? launchedAt,
+    status: raw.status === "failed" || raw.status === "reentry" ? raw.status : "alive",
+    events: Array.isArray(raw.events) ? raw.events : [],
+    lifeCut: typeof raw.lifeCut === "number" ? raw.lifeCut : 0,
   };
+}
+
+export function makeLapka(launchedAt = 0): Craft {
+  return normalizeCraft(
+    {
+      id: "craft-lapka",
+      name: "Лапка-1",
+      orbit: "sso535",
+      cameras: ["opt"],
+      memory: "bzu1",
+      hull: "cubesat",
+      phase: 0.4,
+      status: "alive",
+      events: [],
+      lifeCut: 0,
+    },
+    launchedAt,
+  );
 }
 
 export function nextCraftName(crafts: Craft[]) {
@@ -37,7 +72,7 @@ export function nextCraftName(crafts: Craft[]) {
 
 export function freshState(): GameState {
   return {
-    version: 2,
+    version: 3,
     phase: "intro",
     introStep: 0,
     money: 0,
@@ -55,6 +90,7 @@ export function freshState(): GameState {
     crafts: [],
     activeCraftId: null,
     workshop: null,
+    assembly: null,
     pendingCraft: null,
     log: [
       {
@@ -71,7 +107,7 @@ export function freshState(): GameState {
 export function migrateState(raw: Partial<GameState> & { job?: PhotoJob | null }): GameState {
   const base = freshState();
   const { job: legacyJob, ...rest } = raw;
-  const merged: GameState = { ...base, ...rest, version: 2 };
+  const merged: GameState = { ...base, ...rest, version: 3 };
   if (!Array.isArray(raw.jobs)) {
     merged.jobs = legacyJob
       ? [{ ...legacyJob, id: legacyJob.id ?? uid("job"), craftId: legacyJob.craftId ?? "craft-lapka" }]
@@ -86,10 +122,15 @@ export function migrateState(raw: Partial<GameState> & { job?: PhotoJob | null }
       merged.crafts = [];
       merged.activeCraftId = null;
     }
+  } else {
+    merged.crafts = raw.crafts.map((c) => normalizeCraft(c, merged.timeSec));
   }
   merged.tab = raw.tab === "fleet" ? "fleet" : "contracts";
   merged.workshop = raw.workshop ?? null;
-  merged.pendingCraft = raw.pendingCraft ?? null;
+  merged.assembly = raw.assembly
+    ? { craft: normalizeCraft(raw.assembly.craft, merged.timeSec), progress: raw.assembly.progress ?? 0 }
+    : null;
+  merged.pendingCraft = raw.pendingCraft ? normalizeCraft(raw.pendingCraft, merged.timeSec) : null;
   merged.contracts = (merged.contracts ?? []).map((c) => ({ ...c, camera: c.camera ?? "opt" }));
   return merged;
 }
@@ -159,8 +200,19 @@ export function craftJobs(state: GameState, craftId: string) {
 }
 
 export function craftLeft(craft: Craft, timeSec: number) {
-  if (craft.status === "reentry") return 0;
-  return Math.max(0, craftLifeSec(craft.orbit) - Math.max(0, timeSec - craft.launchedAt));
+  if (craft.status === "reentry" || craft.status === "failed") return 0;
+  const age = Math.max(0, timeSec - craft.launchedAt);
+  return Math.max(0, craftLifeSec(craft.orbit) - craft.lifeCut - age);
+}
+
+export function hullLabel(craft: Craft) {
+  return HULLS[craft.hull]?.name ?? craft.hull;
+}
+
+export function craftStatusLabel(craft: Craft) {
+  if (craft.status === "failed") return "отказ";
+  if (craft.status === "reentry") return "сгорел";
+  return "на орбите";
 }
 
 export function formatBureauClock(timeSec: number) {

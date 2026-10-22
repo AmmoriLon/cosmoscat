@@ -177,10 +177,11 @@
 .rocket-flame {
   position: absolute;
   background: radial-gradient(ellipse at 50% 0, #fff7d2 0%, #ffb347 28%, #e86a2a 58%, transparent 78%);
-  filter: blur(0.7px);
+  filter: blur(0.6px);
   transform-origin: top center;
   animation: flame 0.11s infinite alternate;
   pointer-events: none;
+  mix-blend-mode: screen;
 }
 
 @keyframes flame {

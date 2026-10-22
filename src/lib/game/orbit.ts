@@ -5,8 +5,9 @@ import {
   IMAGE_WINDOW_DEG,
   ORBITS,
   PPI_WINDOW_DEG,
+  orbitElements,
 } from "./data";
-import type { OrbitId, PPI } from "./types";
+import type { Craft, OrbitId, PPI } from "./types";
 
 export function wrapLon(lon: number) {
   let x = lon;
@@ -16,10 +17,8 @@ export function wrapLon(lon: number) {
 }
 
 export function satRadius(anomaly: number, orbitId: OrbitId = "sso535") {
-  const spec = ORBITS[orbitId];
-  const a = EARTH_R + spec.alt;
-  const e = spec.ecc;
-  if (e <= 0) return a;
+  const { a, e } = orbitElements(orbitId);
+  if (e <= 0.0001) return a;
   return (a * (1 - e * e)) / (1 + e * Math.cos(anomaly));
 }
 
@@ -42,12 +41,61 @@ export function satEci(anomaly: number, orbitId: OrbitId = "sso535") {
   };
 }
 
-export function orbitPoints(orbitId: OrbitId = "sso535", segments = 160) {
+export function orbitPoints(orbitId: OrbitId = "sso535", segments = 256) {
   const pts: { x: number; y: number; z: number }[] = [];
   for (let i = 0; i <= segments; i++) {
     pts.push(satEci((i / segments) * Math.PI * 2, orbitId));
   }
   return pts;
+}
+
+export function craftAnomaly(craft: Pick<Craft, "orbit" | "phase" | "launchedAt">, timeSec: number) {
+  const period = ORBITS[craft.orbit].period;
+  const age = Math.max(0, timeSec - craft.launchedAt);
+  return (craft.phase + (age / period) * Math.PI * 2) % (Math.PI * 2);
+}
+
+export function earthAngleAt(timeSec: number) {
+  return ((timeSec / EARTH_DAY_S) * Math.PI * 2) % (Math.PI * 2);
+}
+
+export function altKm(anomaly: number, orbitId: OrbitId) {
+  const r = satRadius(anomaly, orbitId);
+  return ((r - EARTH_R) / EARTH_R) * 6371;
+}
+
+export function craftTelemetry(craft: Craft, timeSec: number) {
+  const anomaly = craftAnomaly(craft, timeSec);
+  const angle = earthAngleAt(timeSec);
+  const p = satEci(anomaly, craft.orbit);
+  const ll = eciToLatLon(p.x, p.y, p.z, angle);
+  const r = satRadius(anomaly, craft.orbit);
+  const { a, e, spec } = orbitElements(craft.orbit);
+  const thermalHit = craft.events.some((ev) => ev.kind === "thermal");
+  const hydroHit = craft.events.some((ev) => ev.kind === "hydro" || ev.kind === "gyro");
+  const solarHit = craft.events.some((ev) => ev.kind === "solar");
+  const battHit = craft.events.some((ev) => ev.kind === "battery");
+  const radioHit = craft.events.some((ev) => ev.kind === "radio");
+  const shade = (Math.sin(anomaly + angle) + 1) / 2;
+  const baseTemp = 4 + (r - EARTH_R) * 38 + shade * 22;
+  return {
+    anomaly,
+    lat: ll.lat,
+    lon: ll.lon,
+    altKm: ((r - EARTH_R) / EARTH_R) * 6371,
+    periKm: (spec.periAlt / EARTH_R) * 6371,
+    apoKm: (spec.apoAlt / EARTH_R) * 6371,
+    ecc: e,
+    inc: spec.inc,
+    period: spec.period,
+    speed: 7.67 * Math.sqrt(a / r),
+    tempC: baseTemp + (thermalHit ? 28 : 0),
+    busV: 28.4 - (battHit ? 6.2 : 0) - (solarHit ? 3.1 : 0) - shade * 1.4,
+    attitude: hydroHit ? "дрейф" : "стабилен",
+    radio: radioHit ? "узкая полоса" : "номинал",
+    power: solarHit ? "недолёт СБ" : "номинал",
+    thermal: thermalHit ? "перегрев" : "в допуске",
+  };
 }
 
 export function latLonToXyz(lat: number, lon: number, r = EARTH_R) {

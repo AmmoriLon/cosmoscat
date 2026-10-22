@@ -1,4 +1,13 @@
-import type { CameraId, ContractTemplate, MemoryId, OrbitId, PPI, SystemId, WorkshopDraft } from "./types";
+import type {
+  CameraId,
+  ContractTemplate,
+  HullId,
+  MemoryId,
+  OrbitId,
+  PPI,
+  SystemId,
+  WorkshopDraft,
+} from "./types";
 
 export const GAME_TITLE = "КБ «Мята»";
 export const SAVE_KEY = "kb-myata-v1";
@@ -30,7 +39,9 @@ export const IMAGE_WINDOW_DEG = 42;
 export const APPROACH_DEG = 58;
 export const PPI_WINDOW_DEG = 46;
 export const TAP_REPAIR = 12;
+export const TAP_ASSEMBLE = 11;
 export const ENGINEER_REPAIR_PER_S = 3.6;
+export const ENGINEER_ASSEMBLE_PER_S = 3.2;
 export const DOWNLINK_S = 2.6;
 export const PROCESS_BASE_S = 6.2;
 export const GSD_BY_OPTICS = [8.6, 5.4, 3.1];
@@ -90,12 +101,13 @@ export const ORBITS: Record<
     blurb: string;
     inc: number;
     raan: number;
-    alt: number;
-    ecc: number;
+    periAlt: number;
+    apoAlt: number;
     period: number;
     maxLat: number;
     cost: number;
     lifeDays: number;
+    ring: string;
   }
 > = {
   sso535: {
@@ -104,12 +116,13 @@ export const ORBITS: Record<
     blurb: "Солнечно-синхронная, 97.4°. Ходит над всей Землёй, как «Лапка-1».",
     inc: 97.4,
     raan: 28,
-    alt: 0.28,
-    ecc: 0,
+    periAlt: 0.28,
+    apoAlt: 0.28,
     period: 36,
     maxLat: 90,
     cost: 1400,
     lifeDays: 10,
+    ring: "#e8a25a",
   },
   eq400: {
     name: "Экваториальная 400 км",
@@ -117,12 +130,13 @@ export const ORBITS: Record<
     blurb: "Дешевле и ниже. Не берёт высокие широты, сгорает раньше.",
     inc: 8,
     raan: 0,
-    alt: 0.18,
-    ecc: 0,
+    periAlt: 0.18,
+    apoAlt: 0.18,
     period: 28,
     maxLat: 22,
     cost: 900,
     lifeDays: 6,
+    ring: "#7ec8c5",
   },
   polar800: {
     name: "Полярная 800 км",
@@ -130,27 +144,96 @@ export const ORBITS: Record<
     blurb: "Выше и дольше живёт. Полюса каждый виток, период длиннее.",
     inc: 90,
     raan: 12,
-    alt: 0.42,
-    ecc: 0,
+    periAlt: 0.42,
+    apoAlt: 0.42,
     period: 48,
     maxLat: 90,
     cost: 2400,
     lifeDays: 16,
+    ring: "#9ec4f0",
   },
   ellip: {
-    name: "Эллиптическая 300×1200",
+    name: "Эллиптическая 350×1450",
     kind: "эллиптическая",
-    blurb: "Перигей низкий, апогей высокий. Долго висит над севером, горит неравномерно.",
+    blurb: "Перигей над атмосферой, апогей высоко. Критическая широта 63.4°, в планету не входит.",
     inc: 63.4,
     raan: 40,
-    alt: 0.34,
-    ecc: 0.32,
+    periAlt: 0.22,
+    apoAlt: 0.86,
     period: 44,
     maxLat: 82,
     cost: 3000,
     lifeDays: 11,
+    ring: "#e6c27a",
   },
 };
+
+export const HULLS: Record<HullId, { name: string; short: string }> = {
+  cubesat: { name: "3U «Лапка»", short: "3U" },
+  irbus: { name: "ИК-платформа", short: "ИК" },
+  msbus: { name: "Мультиспектр", short: "МС" },
+  combo: { name: "Двухканальный", short: "ОПТ+ИК+МС" },
+  polar: { name: "Полярный", short: "ПОЛ" },
+  molniya: { name: "Высокоэллипс", short: "ЭЛЛ" },
+  bus: { name: "Шина «Рысь»", short: "ШИНА" },
+};
+
+export function hullFromSpec(orbit: OrbitId, cameras: CameraId[], memory: MemoryId): HullId {
+  if (orbit === "ellip") return "molniya";
+  if (orbit === "polar800") return "polar";
+  const ir = cameras.includes("ir");
+  const ms = cameras.includes("ms");
+  if (ir && ms) return "combo";
+  if (ir) return "irbus";
+  if (ms) return "msbus";
+  if (memory === "bzu16") return "bus";
+  return "cubesat";
+}
+
+export const FAILURES = [
+  {
+    kind: "hydro",
+    title: "Отказ гидроблока ориентации",
+    detail: "Давление в контуре упало. Маховики берут нагрузку, но запас топлива на коррекцию кончится раньше.",
+    lifeFrac: 0.22,
+  },
+  {
+    kind: "thermal",
+    title: "Нарушение теплового режима",
+    detail: "Радиатор забит, ПЗС греется выше допуска. Электронику придётся глушить на теневых витках.",
+    lifeFrac: 0.18,
+  },
+  {
+    kind: "solar",
+    title: "Деградация солнечных батарей",
+    detail: "Стеклопакеты мутнеют. Ток падает, БЗУ не успевает зарядиться за половину витка.",
+    lifeFrac: 0.16,
+  },
+  {
+    kind: "gyro",
+    title: "Дрейф гироскопов",
+    detail: "Один канал БИНС ушёл. Наведение держится звёздным датчиком, но полоса съёмки плывёт.",
+    lifeFrac: 0.14,
+  },
+  {
+    kind: "battery",
+    title: "Просадка аккумулятора",
+    detail: "Ячейка вздулась. В тени напряжение проседает — рискуем сбросить сеанс.",
+    lifeFrac: 0.2,
+  },
+  {
+    kind: "radio",
+    title: "Сбой передатчика X-диапазона",
+    detail: "Усилитель ушёл в защиту. Сброс на ППИ только узкой полосой, греется корпус.",
+    lifeFrac: 0.15,
+  },
+  {
+    kind: "prop",
+    title: "Утечка в двигателе коррекции",
+    detail: "Клапан не закрылся до конца. Перигей ползёт вниз — срок жизни режется сразу.",
+    lifeFrac: 0.26,
+  },
+] as const;
 
 export const CAMERAS: Record<CameraId, { name: string; short: string; blurb: string; cost: number }> = {
   opt: { name: "Оптика", short: "ОПТ", blurb: "Видимый диапазон. База почти любого КА.", cost: 0 },
@@ -163,6 +246,15 @@ export const MEMORIES: Record<MemoryId, { name: string; slots: number; blurb: st
   bzu4: { name: "БЗУ 4 кадра", slots: 4, blurb: "Можно держать пачку до зоны ППИ.", cost: 850 },
   bzu16: { name: "БЗУ 16 кадров", slots: 16, blurb: "Почти как у аппарата побольше.", cost: 2100 },
 };
+
+export function orbitElements(orbitId: OrbitId) {
+  const spec = ORBITS[orbitId];
+  const rp = EARTH_R + spec.periAlt;
+  const ra = EARTH_R + spec.apoAlt;
+  const a = (rp + ra) / 2;
+  const e = ra + rp > 0 ? (ra - rp) / (ra + rp) : 0;
+  return { rp, ra, a, e, spec };
+}
 
 export function buildCost(draft: WorkshopDraft) {
   const cams = draft.cameras.reduce((sum, id) => sum + CAMERAS[id].cost, 0);
