@@ -175,21 +175,21 @@
 }
 
 .rocket-flame {
-  position: relative;
-  height: 36px;
-  width: 22px;
-  background: radial-gradient(circle at 50% 0, #fff6d2, #e8a25a 40%, transparent 70%);
-  filter: blur(0.5px);
-  animation: flame 0.12s infinite alternate;
+  position: absolute;
+  background: radial-gradient(ellipse at 50% 0, #fff7d2 0%, #ffb347 28%, #e86a2a 58%, transparent 78%);
+  filter: blur(0.7px);
+  transform-origin: top center;
+  animation: flame 0.11s infinite alternate;
+  pointer-events: none;
 }
 
 @keyframes flame {
   from {
-    transform: scaleY(0.85);
-    opacity: 0.8;
+    transform: translateX(-50%) scaleY(0.88) scaleX(0.92);
+    opacity: 0.85;
   }
   to {
-    transform: scaleY(1.15);
+    transform: translateX(-50%) scaleY(1.18) scaleX(1.05);
     opacity: 1;
   }
 }

@@ -61,25 +61,39 @@ export function Launch({ t, craft }: { t: number; craft: Craft | null }) {
           <div className="absolute -right-10 top-16 h-1 w-12 bg-[#3d4a5e]" />
         </div>
         <div
-          className="absolute bottom-6 left-1/2 w-28 -translate-x-1/2"
+          className="absolute bottom-4 left-1/2 w-32 -translate-x-1/2 sm:w-36"
           style={{
-            transform: `translate(-50%, ${-lift * 340}px) scale(${1 - lift * 0.35})`,
+            transform: `translate(-50%, ${-lift * 360}px) scale(${1 - lift * 0.32})`,
           }}
         >
-          <Image
-            src="/game/hardware-rocket-cat.jpg"
-            alt="Камыш-2"
-            width={220}
-            height={220}
-            className="h-auto w-full object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.55)]"
-            priority
-          />
-          {ignite ? (
-            <div
-              className="rocket-flame mx-auto -mt-2"
-              style={{ height: `${28 + lift * 22}px`, width: `${18 + lift * 8}px` }}
+          <div className="relative">
+            <Image
+              src="/game/launch-rocket.png"
+              alt="Камыш-2"
+              width={433}
+              height={984}
+              className="relative z-10 h-auto w-full object-contain drop-shadow-[0_10px_18px_rgba(0,0,0,0.45)]"
+              priority
             />
-          ) : null}
+            {ignite
+              ? [
+                  { left: "50%", w: 22 + lift * 8, h: 46 + lift * 26 },
+                  { left: "22%", w: 12 + lift * 5, h: 28 + lift * 16 },
+                  { left: "78%", w: 12 + lift * 5, h: 28 + lift * 16 },
+                ].map((f, i) => (
+                  <div
+                    key={i}
+                    className="rocket-flame"
+                    style={{
+                      top: "88.6%",
+                      left: f.left,
+                      width: f.w,
+                      height: f.h,
+                    }}
+                  />
+                ))
+              : null}
+          </div>
         </div>
         {ignite ? (
           <div
