@@ -21,6 +21,7 @@ import {
   earthAngleAt,
   imagingIds,
   orbitCanSee,
+  trackReaches,
   ppiInView,
   satEci,
 } from "./orbit";
@@ -228,6 +229,9 @@ function reducer(state: GameState, action: Action): GameState {
       }
       if (!orbitCanSee(craft.orbit, c.lat)) {
         return addLog(state, `Эта орбита не берёт ${c.title}. Широта вне полосы.`);
+      }
+      if (!trackReaches(craft.orbit, c.lat, c.lon)) {
+        return addLog(state, `Трасса «${craft.name}» не задевает «${c.title}».`);
       }
       const contracts = state.contracts.map((x) =>
         x.id === action.id ? { ...x, status: "active" as const } : x,
@@ -468,7 +472,7 @@ export function useGame() {
           const orbitId = craft.orbit;
           snap.anomaly = craftAnomaly(craft, snap.clock);
           const p = satEci(snap.anomaly, orbitId);
-          const ll = eciToLatLon(p.x, p.y, p.z, snap.earthAngle);
+          const ll = eciToLatLon(p.x, p.y, p.z, 0);
           snap.satLat = ll.lat;
           snap.satLon = ll.lon;
           const active = s.contracts.filter((c) => c.status === "active");

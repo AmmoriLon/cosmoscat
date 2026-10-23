@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useRef } from "react";
+import { Suspense, useMemo, useRef, type ReactNode } from "react";
 import { Canvas, useFrame, useLoader } from "@react-three/fiber";
 import { OrbitControls, Stars } from "@react-three/drei";
 import * as THREE from "three";
@@ -38,6 +38,14 @@ function Earth({ simRef }: { simRef: SimRef }) {
       </mesh>
     </group>
   );
+}
+
+function TrackFrame({ simRef, children }: { simRef: SimRef; children: ReactNode }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(() => {
+    if (ref.current) ref.current.rotation.y = simRef.current.earthAngle;
+  });
+  return <group ref={ref}>{children}</group>;
 }
 
 function OrbitRing({ orbitId }: { orbitId: OrbitId }) {
@@ -337,8 +345,7 @@ function DataStream({
     const p = satEci(a, craft.orbit);
     scratch.craft.set(p.x, p.y, p.z);
     const local = latLonToXyz(lat, lon, EARTH_R * 1.03);
-    const g = rotateY(local, simRef.current.earthAngle);
-    scratch.ground.set(g.x, g.y, g.z);
+    scratch.ground.set(local.x, local.y, local.z);
     scratch.control.addVectors(scratch.ground, scratch.craft).multiplyScalar(0.5);
     const lift = scratch.control.length() || 1;
     scratch.control.multiplyScalar((lift + 0.9) / lift);
@@ -441,51 +448,53 @@ export function Globe({
         <Suspense fallback={null}>
           <Earth simRef={simRef} />
         </Suspense>
-        {orbits.map((id) => (
-          <OrbitRing key={id} orbitId={id} />
-        ))}
-        {alive.map((craft) => (
-          <Satellite
-            key={craft.id}
-            craft={craft}
-            simRef={simRef}
-            flash={flash}
-            selected={craft.id === activeCraftId}
-            onInspect={onInspect}
-          />
-        ))}
-        {active
-          ? [...captures.values()].map((c) => (
-              <DataStream
-                key={`up-${c.id}`}
-                craft={active}
-                lat={c.lat}
-                lon={c.lon}
-                simRef={simRef}
-                direction="up"
-                color={c.id === burstId ? "#ffe1a8" : "#e8a25a"}
-                speed={c.id === burstId ? 1.35 : 0.55}
-              />
-            ))
-          : null}
-        {active
-          ? dumpStations.map((id) => {
-              const station = PPIS.find((p) => p.id === id);
-              if (!station) return null;
-              return (
+        <TrackFrame simRef={simRef}>
+          {orbits.map((id) => (
+            <OrbitRing key={id} orbitId={id} />
+          ))}
+          {alive.map((craft) => (
+            <Satellite
+              key={craft.id}
+              craft={craft}
+              simRef={simRef}
+              flash={flash}
+              selected={craft.id === activeCraftId}
+              onInspect={onInspect}
+            />
+          ))}
+          {active
+            ? [...captures.values()].map((c) => (
                 <DataStream
-                  key={`down-${id}`}
+                  key={`up-${c.id}`}
                   craft={active}
-                  lat={station.lat}
-                  lon={station.lon}
+                  lat={c.lat}
+                  lon={c.lon}
                   simRef={simRef}
-                  direction="down"
-                  color="#7ee0ff"
-                  speed={0.85}
+                  direction="up"
+                  color={c.id === burstId ? "#ffe1a8" : "#e8a25a"}
+                  speed={c.id === burstId ? 1.35 : 0.55}
                 />
-              );
-            })
-          : null}
+              ))
+            : null}
+          {active
+            ? dumpStations.map((id) => {
+                const station = PPIS.find((p) => p.id === id);
+                if (!station) return null;
+                return (
+                  <DataStream
+                    key={`down-${id}`}
+                    craft={active}
+                    lat={station.lat}
+                    lon={station.lon}
+                    simRef={simRef}
+                    direction="down"
+                    color="#7ee0ff"
+                    speed={0.85}
+                  />
+                );
+              })
+            : null}
+        </TrackFrame>
         {PPIS.map((p) => (
           <Marker
             key={p.id}

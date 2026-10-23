@@ -66,9 +66,8 @@ export function altKm(anomaly: number, orbitId: OrbitId) {
 
 export function craftTelemetry(craft: Craft, timeSec: number) {
   const anomaly = craftAnomaly(craft, timeSec);
-  const angle = earthAngleAt(timeSec);
   const p = satEci(anomaly, craft.orbit);
-  const ll = eciToLatLon(p.x, p.y, p.z, angle);
+  const ll = eciToLatLon(p.x, p.y, p.z, 0);
   const r = satRadius(anomaly, craft.orbit);
   const { a, e, spec } = orbitElements(craft.orbit);
   const thermalHit = craft.events.some((ev) => ev.kind === "thermal");
@@ -76,7 +75,7 @@ export function craftTelemetry(craft: Craft, timeSec: number) {
   const solarHit = craft.events.some((ev) => ev.kind === "solar");
   const battHit = craft.events.some((ev) => ev.kind === "battery");
   const radioHit = craft.events.some((ev) => ev.kind === "radio");
-  const shade = (Math.sin(anomaly + angle) + 1) / 2;
+  const shade = (Math.sin(anomaly + earthAngleAt(timeSec)) + 1) / 2;
   const baseTemp = 4 + (r - EARTH_R) * 38 + shade * 22;
   return {
     anomaly,
@@ -137,6 +136,21 @@ export function orbitCanSee(orbitId: OrbitId, lat: number) {
   return Math.abs(lat) <= ORBITS[orbitId].maxLat + 0.2;
 }
 
+export function trackMinDeg(orbitId: OrbitId, lat: number, lon: number) {
+  let min = 180;
+  const steps = 120;
+  for (let i = 0; i < steps; i++) {
+    const p = satEci((i / steps) * Math.PI * 2, orbitId);
+    const ll = eciToLatLon(p.x, p.y, p.z, 0);
+    min = Math.min(min, angularDistance(ll.lat, ll.lon, lat, lon));
+  }
+  return min;
+}
+
+export function trackReaches(orbitId: OrbitId, lat: number, lon: number, deg = IMAGE_WINDOW_DEG) {
+  return trackMinDeg(orbitId, lat, lon) <= deg;
+}
+
 export function inWindow(satLat: number, satLon: number, lat: number, lon: number, deg: number) {
   return angularDistance(satLat, satLon, lat, lon) <= deg;
 }
@@ -177,7 +191,7 @@ export function ppiInView(satLat: number, satLon: number, stations: PPI[] = []) 
 
 export function etaToTarget(
   anomaly: number,
-  earthAngle: number,
+  _earthAngle: number,
   lat: number,
   lon: number,
   orbitId: OrbitId = "sso535",
@@ -188,9 +202,8 @@ export function etaToTarget(
   for (let i = 0; i <= steps; i++) {
     const t = (i / steps) * period;
     const a = anomaly + (t * Math.PI * 2) / period;
-    const ea = earthAngle + (t * Math.PI * 2) / EARTH_DAY_S;
     const p = satEci(a, orbitId);
-    const ll = eciToLatLon(p.x, p.y, p.z, ea);
+    const ll = eciToLatLon(p.x, p.y, p.z, 0);
     if (inWindow(ll.lat, ll.lon, lat, lon, IMAGE_WINDOW_DEG)) return t;
   }
   return null;

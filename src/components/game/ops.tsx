@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { CAMERAS, PPIS } from "@/lib/game/data";
-import { etaToTarget, fmtCoord, orbitCanSee } from "@/lib/game/orbit";
+import { etaToTarget, fmtCoord, orbitCanSee, trackReaches } from "@/lib/game/orbit";
 import { activeCraft, formatMoney } from "@/lib/game/save";
 import type { Contract, GameState, PhotoJob, SimSnapshot } from "@/lib/game/types";
 import { CatPortrait } from "./cat-portrait";
@@ -209,6 +209,7 @@ function offerFit(craft: ReturnType<typeof activeCraft>, contract: Contract) {
   if (!craft || craft.status !== "alive") return { ok: false, reason: "нет живого КА" };
   if (!craft.cameras.includes(contract.camera)) return { ok: false, reason: `нужен ${CAMERAS[contract.camera].short}` };
   if (!orbitCanSee(craft.orbit, contract.lat)) return { ok: false, reason: "вне полосы орбиты" };
+  if (!trackReaches(craft.orbit, contract.lat, contract.lon)) return { ok: false, reason: "трасса не задевает" };
   return { ok: true, reason: null };
 }
 

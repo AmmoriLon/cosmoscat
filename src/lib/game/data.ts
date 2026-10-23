@@ -35,9 +35,9 @@ export const EARTH_DAY_S = 36 * 15;
 export const DAY_SEC = 48;
 export const BUS_COST = 700;
 export const LAUNCH_END_S = 13.8;
-export const IMAGE_WINDOW_DEG = 42;
-export const APPROACH_DEG = 58;
-export const PPI_WINDOW_DEG = 46;
+export const IMAGE_WINDOW_DEG = 50;
+export const APPROACH_DEG = 66;
+export const PPI_WINDOW_DEG = 52;
 export const TAP_REPAIR = 12;
 export const ENGINEER_REPAIR_PER_S = 3.6;
 export const DOWNLINK_S = 2.6;
@@ -113,9 +113,9 @@ export const ORBITS: Record<
   sso535: {
     name: "ССО 535 км",
     kind: "круговая",
-    blurb: "Солнечно-синхронная, 97.4°. Ходит над всей Землёй, как «Лапка-1».",
+    blurb: "Солнечно-синхронная, 97.4°. Трасса привязана к Земле и каждый виток идёт над районами и ППИ.",
     inc: 97.4,
-    raan: 28,
+    raan: 156,
     periAlt: 0.28,
     apoAlt: 0.28,
     periKm: 535,
@@ -131,7 +131,7 @@ export const ORBITS: Record<
     kind: "круговая",
     blurb: "Дешевле и ниже. Не берёт высокие широты, сгорает раньше.",
     inc: 8,
-    raan: 0,
+    raan: 96,
     periAlt: 0.18,
     apoAlt: 0.18,
     periKm: 400,
@@ -147,7 +147,7 @@ export const ORBITS: Record<
     kind: "круговая",
     blurb: "Выше и дольше живёт. Полюса каждый виток, период длиннее.",
     inc: 90,
-    raan: 12,
+    raan: 154,
     periAlt: 0.42,
     apoAlt: 0.42,
     periKm: 800,
@@ -163,7 +163,7 @@ export const ORBITS: Record<
     kind: "эллиптическая",
     blurb: "Перигей над атмосферой, апогей высоко. Критическая широта 63.4°, в планету не входит.",
     inc: 63.4,
-    raan: 40,
+    raan: 0,
     periAlt: 0.22,
     apoAlt: 0.86,
     periKm: 350,
