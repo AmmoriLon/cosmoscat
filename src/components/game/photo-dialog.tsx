@@ -13,12 +13,14 @@ import {
 import { PHOTO_IMG, PPIS } from "@/lib/game/data";
 import { formatMoney, photoPayout } from "@/lib/game/save";
 import type { Contract, PhotoJob } from "@/lib/game/types";
+import { DataFlow } from "./data-flow";
 
 export function PhotoDialog({
   open,
   job,
   contract,
   opticsLevel,
+  dumping,
   onSell,
   onClose,
 }: {
@@ -26,6 +28,7 @@ export function PhotoDialog({
   job: PhotoJob | null;
   contract: Contract | null;
   opticsLevel: number;
+  dumping: boolean;
   onSell: (jobId: string) => void;
   onClose: () => void;
 }) {
@@ -41,7 +44,9 @@ export function PhotoDialog({
           <DialogDescription>
             {contract
               ? raw
-                ? "Камера сняла. Сейчас сбросим на ППИ, операторы соберут чистую картинку."
+                ? job?.stage === "downlink"
+                  ? "Поток идёт с борта на станцию. Операторы соберут картинку после сброса."
+                  : "Камера сняла. Поток лежит на борту, пока аппарат не выйдет на ППИ."
                 : `${contract.client} получит снимок, КБ — деньги.`
               : "Нет кадра"}
           </DialogDescription>
@@ -66,13 +71,20 @@ export function PhotoDialog({
               Продать за {formatMoney(photoPayout(contract, opticsLevel))}
             </Button>
           ) : (
-            <p className="text-xs text-zinc-400">
-              {job?.stage === "downlink"
-                ? `Сброс на ${ppi?.name ?? "ППИ"}…`
-                : job?.stage === "processing"
-                  ? "Операторы собирают снимок…"
-                  : "Кадр на борту. Ждём ППИ."}
-            </p>
+            <div className="grid w-full gap-2">
+              {job?.stage === "downlink" && dumping ? (
+                <DataFlow from="Борт" to={ppi?.short ?? "ППИ"} tone="dump" />
+              ) : null}
+              <p className="text-xs text-zinc-400">
+                {job?.stage === "downlink"
+                  ? dumping
+                    ? `Сброс на ${ppi?.name ?? "ППИ"}…`
+                    : `Поток ждёт ${ppi?.name ?? "ППИ"}. Станция ещё не в зоне.`
+                  : job?.stage === "processing"
+                    ? "Операторы собирают снимок…"
+                    : "Поток снят на борт. Сброс начнётся над ППИ."}
+              </p>
+            </div>
           )}
         </DialogFooter>
       </DialogContent>

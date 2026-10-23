@@ -9,6 +9,7 @@ import { etaToTarget, fmtCoord, orbitCanSee } from "@/lib/game/orbit";
 import { activeCraft, formatMoney } from "@/lib/game/save";
 import type { Contract, GameState, PhotoJob, SimSnapshot } from "@/lib/game/types";
 import { CatPortrait } from "./cat-portrait";
+import { DataFlow } from "./data-flow";
 
 export function OpsPanel({
   state,
@@ -63,6 +64,7 @@ export function OpsPanel({
           key={job.id}
           job={job}
           contracts={state.contracts}
+          live={!!job.ppiId && sim.inPpi.includes(job.ppiId)}
           onOpenPhoto={() => onOpenPhoto(job.id)}
         />
       ))}
@@ -72,9 +74,12 @@ export function OpsPanel({
           Живого аппарата нет. Открой «Аппараты» и собери новый КА.
         </div>
       ) : shootable ? (
-        <Button className="tap-btn h-14 w-full text-base" onClick={() => onShoot(shootable.id)}>
-          Снять «{shootable.title}»
-        </Button>
+        <>
+          <DataFlow from="Район" to="Борт" tone="capture" />
+          <Button className="tap-btn h-14 w-full text-base" onClick={() => onShoot(shootable.id)}>
+            Снять «{shootable.title}»
+          </Button>
+        </>
       ) : approaching ? (
         <div className="rounded-2xl border border-copper/40 bg-copper/10 px-4 py-3 text-sm">
           Вход в кадр. «{approaching.title}» скоро под полосой — готовь затвор.
@@ -154,10 +159,12 @@ export function OpsPanel({
 function JobStrip({
   job,
   contracts,
+  live,
   onOpenPhoto,
 }: {
   job: PhotoJob;
   contracts: Contract[];
+  live: boolean;
   onOpenPhoto: () => void;
 }) {
   const c = contracts.find((x) => x.id === job.contractId);
@@ -170,23 +177,31 @@ function JobStrip({
           ? "Дешифровка"
           : "Готов к продаже";
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpenPhoto}
-      className="rounded-2xl border border-white/10 bg-[#121826] p-3 text-left"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenPhoto();
+        }
+      }}
+      className="cursor-pointer rounded-2xl border border-white/10 bg-[#121826] p-3 text-left"
     >
       <div className="mb-2 flex items-center justify-between">
         <p className="text-sm">{c?.title ?? "Кадр"}</p>
         <Badge variant="secondary">{label}</Badge>
       </div>
+      {job.stage === "downlink" && live ? <DataFlow from="Борт" to="ППИ" tone="dump" /> : null}
       {job.stage !== "ready" && job.stage !== "onboard" ? (
-        <Progress value={job.progress * 100} className="gap-0" />
+        <Progress value={job.progress * 100} className="mt-2 gap-0" />
       ) : (
-        <p className="text-xs text-zinc-400">
-          {job.stage === "ready" ? "Открыть товарный снимок" : "Ждём ППИ, чтобы сбросить поток"}
+        <p className="mt-2 text-xs text-zinc-400">
+          {job.stage === "ready" ? "Открыть товарный снимок" : "Поток на борту. Ждём ППИ, чтобы сбросить."}
         </p>
       )}
-    </button>
+    </div>
   );
 }
 

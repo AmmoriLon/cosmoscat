@@ -27,6 +27,7 @@ export function Game() {
   const [flash, setFlash] = useState(0);
   const [inspectId, setInspectId] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
+  const [shot, setShot] = useState<{ contractId: string; at: number } | null>(null);
 
   useEffect(() => {
     setMuted(soundMuted());
@@ -124,11 +125,13 @@ export function Game() {
           {state.tab === "contracts" ? (
             <Globe
               simRef={simRef}
+              sim={sim}
               contracts={state.contracts}
+              jobs={state.jobs}
               crafts={state.crafts}
               activeCraftId={state.activeCraftId}
               flash={flash}
-              jobActive={state.jobs.some((j) => j.stage === "onboard" || j.stage === "downlink")}
+              shot={shot}
               onInspect={(id) => setInspectId(id)}
             />
           ) : null}
@@ -140,7 +143,9 @@ export function Game() {
                 onAccept={actions.accept}
                 onShoot={(id) => {
                   actions.shoot(id);
-                  setFlash(performance.now());
+                  const at = performance.now();
+                  setFlash(at);
+                  setShot({ contractId: id, at });
                   setPhotoId(null);
                   setPhotoOpen(true);
                 }}
@@ -197,6 +202,7 @@ export function Game() {
         job={openJob}
         contract={photoContract}
         opticsLevel={state.opticsLevel}
+        dumping={!!openJob && openJob.stage === "downlink" && !!openJob.ppiId && sim.inPpi.includes(openJob.ppiId)}
         onSell={(jobId) => {
           actions.sell(jobId);
           setPhotoId(null);

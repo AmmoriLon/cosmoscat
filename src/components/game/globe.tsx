@@ -5,8 +5,8 @@ import { Canvas, useFrame, useLoader } from "@react-three/fiber";
 import { OrbitControls, Stars } from "@react-three/drei";
 import * as THREE from "three";
 import { EARTH_R, ORBITS, PPIS } from "@/lib/game/data";
-import { craftAnomaly, latLonToXyz, rotateY, satEci, satRadius } from "@/lib/game/orbit";
-import type { Contract, Craft, HullId, OrbitId, SimRef } from "@/lib/game/types";
+import { craftAnomaly, latLonToXyz, rotateY, satEci } from "@/lib/game/orbit";
+import type { Contract, Craft, HullId, OrbitId, PhotoJob, SimRef, SimSnapshot } from "@/lib/game/types";
 
 class KeplerCurve extends THREE.Curve<THREE.Vector3> {
   orbitId: OrbitId;
@@ -295,44 +295,137 @@ function Marker({
   );
 }
 
-function Beam({ craft, simRef }: { craft: Craft; simRef: SimRef }) {
-  const ref = useRef<THREE.Mesh>(null);
+function DataStream({
+  craft,
+  lat,
+  lon,
+  simRef,
+  direction,
+  color,
+  speed,
+}: {
+  craft: Craft;
+  lat: number;
+  lon: number;
+  simRef: SimRef;
+  direction: "up" | "down";
+  color: string;
+  speed: number;
+}) {
+  const dots = useRef<THREE.Group>(null);
+  const scratch = useMemo(() => {
+    const steps = 28;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array((steps + 1) * 3), 3));
+    const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.85, toneMapped: false });
+    const line = new THREE.Line(geometry, material);
+    line.frustumCulled = false;
+    return {
+      craft: new THREE.Vector3(),
+      ground: new THREE.Vector3(),
+      control: new THREE.Vector3(),
+      point: new THREE.Vector3(),
+      geometry,
+      material,
+      line,
+      steps,
+    };
+  }, [color]);
+
   useFrame(() => {
-    if (!ref.current) return;
     const a = craftAnomaly(craft, simRef.current.clock);
     const p = satEci(a, craft.orbit);
-    ref.current.position.set(p.x / 2, p.y / 2, p.z / 2);
-    ref.current.lookAt(p.x, p.y, p.z);
-    ref.current.scale.set(1, 1, (satRadius(a, craft.orbit) - EARTH_R) / 2);
+    scratch.craft.set(p.x, p.y, p.z);
+    const local = latLonToXyz(lat, lon, EARTH_R * 1.03);
+    const g = rotateY(local, simRef.current.earthAngle);
+    scratch.ground.set(g.x, g.y, g.z);
+    scratch.control.addVectors(scratch.ground, scratch.craft).multiplyScalar(0.5);
+    const lift = scratch.control.length() || 1;
+    scratch.control.multiplyScalar((lift + 0.9) / lift);
+    scratch.material.color.set(color);
+    const positions = scratch.geometry.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i <= scratch.steps; i++) {
+      const t = i / scratch.steps;
+      const u = 1 - t;
+      scratch.point
+        .set(0, 0, 0)
+        .addScaledVector(scratch.ground, u * u)
+        .addScaledVector(scratch.control, 2 * u * t)
+        .addScaledVector(scratch.craft, t * t);
+      positions.setXYZ(i, scratch.point.x, scratch.point.y, scratch.point.z);
+    }
+    positions.needsUpdate = true;
+    const pack = dots.current;
+    if (!pack) return;
+    const now = performance.now() / 1000;
+    pack.children.forEach((child, i) => {
+      let t = (now * speed + i / pack.children.length) % 1;
+      if (direction === "down") t = 1 - t;
+      const u = 1 - t;
+      child.position
+        .set(0, 0, 0)
+        .addScaledVector(scratch.ground, u * u)
+        .addScaledVector(scratch.control, 2 * u * t)
+        .addScaledVector(scratch.craft, t * t);
+    });
   });
+
   return (
-    <mesh ref={ref}>
-      <cylinderGeometry args={[0.006, 0.02, 2, 8]} />
-      <meshBasicMaterial color="#7ec8c5" transparent opacity={0.35} />
-    </mesh>
+    <group>
+      <primitive object={scratch.line} />
+      <group ref={dots}>
+        {Array.from({ length: 6 }, (_, i) => (
+          <mesh key={i}>
+            <sphereGeometry args={[0.08, 10, 10]} />
+            <meshBasicMaterial color={color} toneMapped={false} />
+          </mesh>
+        ))}
+      </group>
+    </group>
   );
 }
 
 export function Globe({
   simRef,
+  sim,
   contracts,
+  jobs,
   crafts,
   activeCraftId,
   flash,
-  jobActive,
+  shot,
   onInspect,
 }: {
   simRef: SimRef;
+  sim: SimSnapshot;
   contracts: Contract[];
+  jobs: PhotoJob[];
   crafts: Craft[];
   activeCraftId: string | null;
   flash: number;
-  jobActive: boolean;
+  shot: { contractId: string; at: number } | null;
   onInspect: (id: string) => void;
 }) {
   const alive = crafts.filter((c) => c.status === "alive");
   const orbits = [...new Set(alive.map((c) => c.orbit))];
   const active = alive.find((c) => c.id === activeCraftId) ?? null;
+  const now = typeof performance !== "undefined" ? performance.now() : 0;
+  const burstId = shot && now - shot.at < 1800 ? shot.contractId : null;
+  const captures = new Map<string, Contract>();
+  if (active) {
+    for (const id of sim.inImaging) {
+      const contract = contracts.find((c) => c.id === id && c.status === "active");
+      if (contract) captures.set(contract.id, contract);
+    }
+    if (burstId) {
+      const contract = contracts.find((c) => c.id === burstId);
+      if (contract) captures.set(contract.id, contract);
+    }
+  }
+  const dumps = active
+    ? jobs.filter((job) => job.stage === "downlink" && job.ppiId && sim.inPpi.includes(job.ppiId) && job.craftId === active.id)
+    : [];
+  const dumpStations = [...new Set(dumps.map((job) => job.ppiId).filter((id): id is string => !!id))];
 
   return (
     <div className="relative h-[46vh] min-h-[280px] w-full overflow-hidden bg-[#070b14] sm:h-[52vh] lg:h-auto lg:min-h-[520px] lg:flex-1">
@@ -361,9 +454,47 @@ export function Globe({
             onInspect={onInspect}
           />
         ))}
-        {jobActive && active ? <Beam craft={active} simRef={simRef} /> : null}
+        {active
+          ? [...captures.values()].map((c) => (
+              <DataStream
+                key={`up-${c.id}`}
+                craft={active}
+                lat={c.lat}
+                lon={c.lon}
+                simRef={simRef}
+                direction="up"
+                color={c.id === burstId ? "#ffe1a8" : "#e8a25a"}
+                speed={c.id === burstId ? 1.35 : 0.55}
+              />
+            ))
+          : null}
+        {active
+          ? dumpStations.map((id) => {
+              const station = PPIS.find((p) => p.id === id);
+              if (!station) return null;
+              return (
+                <DataStream
+                  key={`down-${id}`}
+                  craft={active}
+                  lat={station.lat}
+                  lon={station.lon}
+                  simRef={simRef}
+                  direction="down"
+                  color="#7ee0ff"
+                  speed={0.85}
+                />
+              );
+            })
+          : null}
         {PPIS.map((p) => (
-          <Marker key={p.id} lat={p.lat} lon={p.lon} color="#7ec8c5" simRef={simRef} />
+          <Marker
+            key={p.id}
+            lat={p.lat}
+            lon={p.lon}
+            color="#7ec8c5"
+            simRef={simRef}
+            pulse={dumpStations.includes(p.id)}
+          />
         ))}
         {contracts
           .filter((c) => c.status === "active" || c.status === "pipeline")
@@ -387,6 +518,18 @@ export function Globe({
           dampingFactor={0.08}
         />
       </Canvas>
+      {captures.size || dumpStations.length ? (
+        <div className="pointer-events-none absolute left-3 top-3 grid gap-1">
+          {captures.size ? (
+            <p className="rounded-full bg-black/55 px-3 py-1 font-mono text-[10px] text-copper">Съёмка · район → борт</p>
+          ) : null}
+          {dumpStations.length ? (
+            <p className="rounded-full bg-black/55 px-3 py-1 font-mono text-[10px] text-teal">
+              Сброс · борт → {dumpStations.map((id) => PPIS.find((p) => p.id === id)?.short ?? "ППИ").join(", ")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <p className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-black/45 px-3 py-1 font-mono text-[10px] text-zinc-300">
         тап по КА · телеметрия · {alive.length} на орбите
       </p>

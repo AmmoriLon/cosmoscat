@@ -205,6 +205,54 @@
   clip-path: polygon(50% 0, 100% 100%, 0 100%);
 }
 
+.data-flow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  background: color-mix(in srgb, currentColor 10%, #101722);
+  padding: 8px 12px;
+}
+
+.packet-track {
+  position: relative;
+  height: 14px;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.packet-track i {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  animation: packet-run 1.25s linear infinite;
+}
+
+@keyframes packet-run {
+  0% {
+    left: -10%;
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    left: 100%;
+    opacity: 0;
+  }
+}
+
 .rocket-flame {
   position: absolute;
   background: radial-gradient(ellipse at 50% 0, #fff7d2 0%, #ffb347 28%, #e86a2a 58%, transparent 78%);
