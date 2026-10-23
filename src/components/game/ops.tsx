@@ -1,5 +1,6 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -32,6 +33,12 @@ export function OpsPanel({
     (c) => c.status === "active" && sim.approaching.includes(c.id),
   );
   const ppi = PPIS.filter((p) => sim.inPpi.includes(p.id));
+  const offered = state.contracts.filter((c) => c.status === "offered");
+  const openAll = offered.filter((c) => offerFit(craft, c).ok);
+  const later = offered.filter((c) => !offerFit(craft, c).ok);
+  const taken = state.contracts.filter((c) => c.status === "active" || c.status === "pipeline");
+  const open = openAll.slice(0, 2);
+  const queued = openAll.length - open.length;
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-3 px-3 pb-24 pt-3">
@@ -74,38 +81,71 @@ export function OpsPanel({
         </div>
       ) : null}
 
-      <div className="grid gap-2">
-        {state.contracts.map((c) => (
+      <section className="grid gap-2">
+        <div>
+          <p className="font-heading text-base">Можно принять</p>
+          <p className="text-xs text-zinc-500">Только то, что этот аппарат берёт прямо сейчас. На столе не больше двух.</p>
+        </div>
+        {open.map((c) => (
           <ContractCard
             key={c.id}
             contract={c}
-            eta={
-              c.status === "active" && craft
-                ? etaToTarget(sim.anomaly, sim.earthAngle, c.lat, c.lon, craft.orbit)
-                : null
-            }
-            canAccept={
-              !!craft &&
-              craft.status === "alive" &&
-              craft.cameras.includes(c.camera) &&
-              orbitCanSee(craft.orbit, c.lat)
-            }
-            blockReason={
-              !craft || craft.status !== "alive"
-                ? "нет КА"
-                : !craft.cameras.includes(c.camera)
-                  ? `нужен ${CAMERAS[c.camera].short}`
-                  : !orbitCanSee(craft.orbit, c.lat)
-                    ? "вне полосы орбиты"
-                    : null
-            }
+            eta={null}
+            canAccept
+            blockReason={null}
             onAccept={() => onAccept(c.id)}
           />
         ))}
-      </div>
+        {open.length === 0 ? (
+          <p className="rounded-2xl border border-white/10 bg-[#121826]/70 p-4 text-sm text-zinc-400">
+            Свободных заявок под этот аппарат нет.
+          </p>
+        ) : null}
+        {queued > 0 ? (
+          <p className="text-xs text-zinc-500">Ещё {queuedLabel(queued)} подождёт, пока освободится стол.</p>
+        ) : null}
+      </section>
 
-      {state.contracts.length === 0 ? (
-        <p className="text-center text-sm text-zinc-500">Заявок нет. Радиомолчит.</p>
+      {taken.length ? (
+        <section className="grid gap-2">
+          <div>
+            <p className="font-heading text-base">Принятые</p>
+            <p className="text-xs text-zinc-500">Координаты уже у расчёта. Эти заявки больше не предлагаются.</p>
+          </div>
+          {taken.map((c) => (
+            <ContractCard
+              key={c.id}
+              contract={c}
+              eta={
+                c.status === "active" && craft
+                  ? etaToTarget(sim.anomaly, sim.earthAngle, c.lat, c.lon, craft.orbit)
+                  : null
+              }
+              canAccept={false}
+              blockReason={null}
+              onAccept={() => onAccept(c.id)}
+            />
+          ))}
+        </section>
+      ) : null}
+
+      {later.length ? (
+        <section className="grid gap-2">
+          <div>
+            <p className="font-heading text-base">Пока не берём</p>
+            <p className="text-xs text-zinc-500">Другая камера или широта вне полосы этого КА.</p>
+          </div>
+          {later.map((c) => (
+            <ContractCard
+              key={c.id}
+              contract={c}
+              eta={null}
+              canAccept={false}
+              blockReason={offerFit(craft, c).reason}
+              onAccept={() => onAccept(c.id)}
+            />
+          ))}
+        </section>
       ) : null}
     </div>
   );
@@ -150,6 +190,20 @@ function JobStrip({
   );
 }
 
+function offerFit(craft: ReturnType<typeof activeCraft>, contract: Contract) {
+  if (!craft || craft.status !== "alive") return { ok: false, reason: "нет живого КА" };
+  if (!craft.cameras.includes(contract.camera)) return { ok: false, reason: `нужен ${CAMERAS[contract.camera].short}` };
+  if (!orbitCanSee(craft.orbit, contract.lat)) return { ok: false, reason: "вне полосы орбиты" };
+  return { ok: true, reason: null };
+}
+
+function queuedLabel(n: number) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  const word = mod10 === 1 && mod100 !== 11 ? "заявка" : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? "заявки" : "заявок";
+  return `${n} ${word}`;
+}
+
 function ContractCard({
   contract,
   eta,
@@ -163,8 +217,36 @@ function ContractCard({
   blockReason: string | null;
   onAccept: () => void;
 }) {
+  const taken = contract.status === "active" || contract.status === "pipeline";
+  const plan =
+    contract.status === "pipeline"
+      ? "Кадр уже в контуре"
+      : eta != null && eta < 1
+        ? "В кадре — снимай"
+        : eta != null
+          ? `Проход через ${Math.max(1, Math.round(eta))} с`
+          : "Ждёт полосу съёмки";
+
+  if (!taken && !canAccept) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-white/5 bg-[#121826]/40 px-3 py-2">
+        <CatPortrait name={contract.client} size={40} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm text-zinc-300">{contract.title}</p>
+          <p className="text-[11px] text-zinc-500">
+            {contract.client} · {blockReason}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex gap-3 rounded-2xl border border-white/10 bg-[#121826]/70 p-3">
+    <div
+      className={`flex gap-3 rounded-2xl border p-3 ${
+        taken ? "border-teal/50 bg-teal/10" : "border-copper/40 bg-[#121826]/70"
+      }`}
+    >
       <CatPortrait name={contract.client} size={56} />
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
@@ -174,24 +256,23 @@ function ContractCard({
               {contract.client} · {contract.role} · {CAMERAS[contract.camera].short}
             </p>
           </div>
-          <p className="font-mono text-[11px] text-copper">{formatMoney(contract.payout)}</p>
+          {taken ? (
+            <Badge className="bg-teal/20 text-teal">
+              <Check aria-hidden />
+              Принята
+            </Badge>
+          ) : (
+            <p className="font-mono text-[11px] text-copper">{formatMoney(contract.payout)}</p>
+          )}
         </div>
         <p className="mt-1 text-xs leading-relaxed text-zinc-400">{contract.brief}</p>
         <p className="mt-1 font-mono text-[10px] text-zinc-500">{fmtCoord(contract.lat, contract.lon)}</p>
-        {contract.status === "offered" ? (
-          <Button size="sm" className="mt-2" disabled={!canAccept} onClick={onAccept}>
-            {canAccept ? "Принять заявку" : blockReason ?? "нельзя"}
-          </Button>
+        {taken ? (
+          <p className="mt-2 text-xs text-teal">{plan}</p>
         ) : (
-          <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-teal">
-            {contract.status === "active"
-              ? eta != null && eta < 1
-                ? "в кадре — снимай"
-                : eta != null
-                  ? `в плане · проход через ${Math.max(1, Math.round(eta))} с`
-                  : "в плане съёмки"
-              : "в контуре"}
-          </p>
+          <Button size="sm" className="mt-2" onClick={onAccept}>
+            Принять заявку
+          </Button>
         )}
       </div>
     </div>

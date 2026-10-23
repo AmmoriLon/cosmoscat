@@ -204,7 +204,7 @@ function reducer(state: GameState, action: Action): GameState {
             phase: "ops",
             launchT: t,
             orbits: Math.max(1, state.orbits),
-            contracts: state.contracts.length ? state.contracts : pickContracts([], 3),
+            contracts: state.contracts.length ? state.contracts : pickContracts([], 2),
             crafts,
             activeCraftId: craft.id,
             pendingCraft: null,
