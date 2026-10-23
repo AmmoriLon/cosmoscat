@@ -11,6 +11,7 @@ import {
   lifeCutForBuild,
 } from "@/lib/game/save";
 import type { GameState } from "@/lib/game/types";
+import { play } from "@/lib/game/sfx";
 import { CatPortrait } from "./cat-portrait";
 
 const GEAR_ROUNDS = 4;
@@ -111,6 +112,7 @@ function GearGame({ onDone }: { onDone: (score: number) => void }) {
     locked.current = true;
     scores.current.push(score);
     ping(score > 0);
+    play(score > 0 ? "good" : "bad");
     setFlash(label);
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(score ? 12 : 28);
     window.setTimeout(() => {
@@ -253,7 +255,10 @@ function BoltsGame({ onDone }: { onDone: (score: number) => void }) {
       setNote(isBad ? "Брак — не жми" : "Болт — жми");
       later(isBad ? 760 : Math.max(520, 980 - i * 45), () => {
         if (spawn.current?.id === item.id) {
-          if (!item.bad) pingRef.current(false);
+          if (!item.bad) {
+            pingRef.current(false);
+            play("bad");
+          }
           spawn.current = null;
           setCell(null);
         }
@@ -292,10 +297,12 @@ function BoltsGame({ onDone }: { onDone: (score: number) => void }) {
                   tally.current.badTap += 1;
                   setNote("Схватил брак");
                   ping(false);
+                  play("bad");
                 } else {
                   tally.current.hit += 1;
                   setNote("Поймал");
                   ping(true);
+                  play("good");
                 }
                 if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
               }}
@@ -363,7 +370,10 @@ function FlashGame({ onDone }: { onDone: (score: number) => void }) {
         phase.current = { kind, tapped: false };
         setShown(kind);
         later(680, () => {
-          if (kind === "go" && !phase.current.tapped) pingRef.current(false);
+          if (kind === "go" && !phase.current.tapped) {
+            pingRef.current(false);
+            play("bad");
+          }
           setDoneCount(index);
           step();
         });
@@ -401,9 +411,11 @@ function FlashGame({ onDone }: { onDone: (score: number) => void }) {
           if (cur.kind === "go") {
             scoreApi.current?.hit();
             ping(true);
+            play("good");
           } else {
             scoreApi.current?.bad();
             ping(false);
+            play("bad");
           }
           if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(cur.kind === "go" ? 10 : 30);
           setShown(cur.kind);
@@ -433,6 +445,9 @@ function Verdict({
 }) {
   const grade = buildGrade(scores);
   const longer = orbitLife < 0;
+  useEffect(() => {
+    play(grade === "bad" ? "bad" : grade === "good" ? "coin" : "ui");
+  }, [grade]);
   const names = ["Шестерня", "Болты", "Искра"];
   return (
     <div className="flex flex-1 flex-col">

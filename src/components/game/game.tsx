@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GAME_TITLE } from "@/lib/game/data";
+import { play, setSoundMuted, soundMuted, unlockSound } from "@/lib/game/sfx";
 import { formatBureauClock, formatMoney } from "@/lib/game/save";
 import { useGame } from "@/lib/game/use-game";
 import type { Craft } from "@/lib/game/types";
@@ -25,6 +26,11 @@ export function Game() {
   const [photoId, setPhotoId] = useState<string | null>(null);
   const [flash, setFlash] = useState(0);
   const [inspectId, setInspectId] = useState<string | null>(null);
+  const [muted, setMuted] = useState(false);
+
+  useEffect(() => {
+    setMuted(soundMuted());
+  }, []);
 
   const openJob = useMemo(() => {
     if (photoId) return state.jobs.find((j) => j.id === photoId) ?? null;
@@ -39,7 +45,7 @@ export function Game() {
   const inspectCraft = state.crafts.find((c) => c.id === inspectId) ?? null;
 
   return (
-    <div className="game-root">
+    <div className="game-root" onPointerDown={unlockSound}>
       <header className="flex items-center justify-between gap-3 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div>
           <p className="font-mono text-[10px] tracking-[0.22em] text-copper">ГЕНКОНСТРУКТОР</p>
@@ -47,6 +53,18 @@ export function Game() {
         </div>
         {state.phase !== "intro" ? (
           <div className="flex items-center gap-2">
+            <SoundToggle
+              muted={muted}
+              onToggle={() => {
+                const next = !muted;
+                setSoundMuted(next);
+                setMuted(next);
+                if (!next) {
+                  unlockSound();
+                  play("ui");
+                }
+              }}
+            />
             {state.phase === "ops" ? (
               <AlarmMark crafts={state.crafts} onOpen={(id) => setInspectId(id)} />
             ) : null}
@@ -60,9 +78,23 @@ export function Game() {
             </div>
           </div>
         ) : (
-          <Button variant="ghost" size="sm" onClick={actions.skipIntro}>
-            Пропуск
-          </Button>
+          <div className="flex items-center gap-2">
+            <SoundToggle
+              muted={muted}
+              onToggle={() => {
+                const next = !muted;
+                setSoundMuted(next);
+                setMuted(next);
+                if (!next) {
+                  unlockSound();
+                  play("ui");
+                }
+              }}
+            />
+            <Button variant="ghost" size="sm" onClick={actions.skipIntro}>
+              Пропуск
+            </Button>
+          </div>
         )}
       </header>
 
@@ -204,6 +236,20 @@ export function Game() {
   );
 }
 
+function SoundToggle({ muted, onToggle }: { muted: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={muted}
+      aria-label={muted ? "Включить звук" : "Выключить звук"}
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5"
+    >
+      {muted ? <VolumeX className="size-4 text-zinc-400" /> : <Volume2 className="size-4 text-zinc-200" />}
+    </button>
+  );
+}
+
 function alarmedCrafts(crafts: Craft[]) {
   return crafts.filter((c) => c.status === "alive" && c.events.length > 0);
 }
@@ -263,6 +309,7 @@ function FailureToasts({ crafts }: { crafts: Craft[] }) {
     }
     const fresh = items.filter((item) => !seen.current.has(item.id));
     fresh.forEach((item) => seen.current.add(item.id));
+    if (fresh.length) play("alarm");
     setToasts((prev) => [...prev.filter((toast) => alive.has(toast.craftId)), ...fresh].slice(-3));
   }, [crafts]);
 

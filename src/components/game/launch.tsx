@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ORBITS } from "@/lib/game/data";
+import { play } from "@/lib/game/sfx";
 import type { Craft } from "@/lib/game/types";
 
 const BEATS = [
@@ -18,6 +19,7 @@ const BEATS = [
 export function Launch({ t, craft }: { t: number; craft: Craft | null }) {
   const [clock, setClock] = useState(t);
   const clockRef = useRef(t);
+  const heardIgnition = useRef(t >= 1.6);
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
@@ -25,6 +27,10 @@ export function Launch({ t, craft }: { t: number; craft: Craft | null }) {
       const dt = Math.min(0.032, (now - last) / 1000);
       last = now;
       clockRef.current += dt;
+      if (!heardIgnition.current && clockRef.current >= 1.6) {
+        heardIgnition.current = true;
+        play("launch");
+      }
       setClock(clockRef.current);
       raf = requestAnimationFrame(loop);
     };

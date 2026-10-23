@@ -45,6 +45,7 @@ import {
   systemReady,
   uid,
 } from "./save";
+import { play } from "./sfx";
 import type { Craft, GameState, MemoryId, OpsTab, OrbitId, SimSnapshot, SystemId, WorkshopDraft } from "./types";
 
 type Action =
@@ -503,11 +504,13 @@ export function useGame() {
 
   const tap = useCallback(() => {
     dispatch({ type: "TAP_REPAIR" });
+    play("tap");
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(8);
   }, []);
 
   const shoot = useCallback((id: string) => {
     dispatch({ type: "SHOOT", id });
+    play("shutter");
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(16);
   }, []);
 
@@ -520,31 +523,80 @@ export function useGame() {
 
   const actions = useMemo(
     () => ({
-      introNext: () => dispatch({ type: "INTRO_NEXT" }),
-      skipIntro: () => dispatch({ type: "SKIP_INTRO" }),
-      focus: (id: SystemId) => dispatch({ type: "FOCUS", id }),
+      introNext: () => {
+        play("ui");
+        dispatch({ type: "INTRO_NEXT" });
+      },
+      skipIntro: () => {
+        play("ui");
+        dispatch({ type: "SKIP_INTRO" });
+      },
+      focus: (id: SystemId) => {
+        play("ui");
+        dispatch({ type: "FOCUS", id });
+      },
       tap,
       finishMinigame: (score: number) => dispatch({ type: "FINISH_MINIGAME", score }),
-      launchBuilt: () => dispatch({ type: "LAUNCH_BUILT" }),
-      startLaunch: () => dispatch({ type: "START_LAUNCH" }),
-      accept: (id: string) => dispatch({ type: "ACCEPT", id }),
+      launchBuilt: () => {
+        play("ui");
+        dispatch({ type: "LAUNCH_BUILT" });
+      },
+      startLaunch: () => {
+        play("ui");
+        dispatch({ type: "START_LAUNCH" });
+      },
+      accept: (id: string) => {
+        play("good");
+        dispatch({ type: "ACCEPT", id });
+      },
       shoot,
-      sell: (jobId: string) => dispatch({ type: "SELL", jobId }),
-      buyOptics: () => dispatch({ type: "BUY_OPTICS" }),
-      buyOps: () => dispatch({ type: "BUY_OPS" }),
-      setTab: (tab: OpsTab) => dispatch({ type: "SET_TAB", tab }),
-      selectCraft: (id: string) => dispatch({ type: "SELECT_CRAFT", id }),
-      openWorkshop: () => dispatch({ type: "OPEN_WORKSHOP" }),
-      closeWorkshop: () => dispatch({ type: "CLOSE_WORKSHOP" }),
+      sell: (jobId: string) => {
+        play("coin");
+        dispatch({ type: "SELL", jobId });
+      },
+      buyOptics: () => {
+        play("coin");
+        dispatch({ type: "BUY_OPTICS" });
+      },
+      buyOps: () => {
+        play("coin");
+        dispatch({ type: "BUY_OPS" });
+      },
+      setTab: (tab: OpsTab) => {
+        play("ui");
+        dispatch({ type: "SET_TAB", tab });
+      },
+      selectCraft: (id: string) => {
+        play("ui");
+        dispatch({ type: "SELECT_CRAFT", id });
+      },
+      openWorkshop: () => {
+        play("ui");
+        dispatch({ type: "OPEN_WORKSHOP" });
+      },
+      closeWorkshop: () => {
+        play("ui");
+        dispatch({ type: "CLOSE_WORKSHOP" });
+      },
       editWorkshop: (draft: Partial<WorkshopDraft>) => dispatch({ type: "EDIT_WORKSHOP", draft }),
       toggleCamera: (id: WorkshopDraft["cameras"][number]) => {
         const cur = stateRef.current.workshop?.cameras ?? ["opt"];
         const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+        play("ui");
         dispatch({ type: "EDIT_WORKSHOP", draft: { cameras: next } });
       },
-      setOrbit: (orbit: OrbitId) => dispatch({ type: "EDIT_WORKSHOP", draft: { orbit } }),
-      setMemory: (memory: MemoryId) => dispatch({ type: "EDIT_WORKSHOP", draft: { memory } }),
-      commitBuild: () => dispatch({ type: "COMMIT_BUILD" }),
+      setOrbit: (orbit: OrbitId) => {
+        play("ui");
+        dispatch({ type: "EDIT_WORKSHOP", draft: { orbit } });
+      },
+      setMemory: (memory: MemoryId) => {
+        play("ui");
+        dispatch({ type: "EDIT_WORKSHOP", draft: { memory } });
+      },
+      commitBuild: () => {
+        play("ui");
+        dispatch({ type: "COMMIT_BUILD" });
+      },
       reset,
     }),
     [reset, shoot, tap],
